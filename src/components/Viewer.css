@@ -1,0 +1,163 @@
+.viewer {
+  position: relative;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  background: #000;
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  min-height: 0;
+}
+
+.viewer .canvas {
+  flex: 1;
+  background-color: #000;
+  background-image:
+    linear-gradient(rgba(0,200,215,0.07) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0,200,215,0.07) 1px, transparent 1px),
+    linear-gradient(rgba(0,200,215,0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0,200,215,0.03) 1px, transparent 1px);
+  overflow-x: hidden;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-height: 0;
+  padding: 12px;
+}
+
+.viewer .canvas svg {
+  /* Dimensions are controlled by Viewer.jsx inline styles (100% for 1x, 200% for 2x, etc.) */
+  flex-shrink: 0; /* Crucial so flex column doesn't squish height back to 100% */
+  transition: width 0.2s ease, height 0.2s ease;
+  filter: drop-shadow(0 2px 8px rgba(0,0,0,0.6));
+  display: block;
+}
+
+.viewer .canvas.zoom-mode {
+  cursor: zoom-in;
+}
+
+.viewer .canvas.zoom-mode:hover {
+  background: radial-gradient(circle at center, #1e293b 0%, #0f172a 100%);
+  border-radius: 4px;
+}
+
+.viewer-zoom {
+  display: flex;
+  justify-content: space-evenly;
+}
+
+.viewer .viewer-toolbar {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 10;
+  display: flex;
+  gap: 8px;
+}
+
+.viewer .viewer-toolbar {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(15, 23, 42, 0.6);
+  padding: 4px;
+  border-radius: 8px;
+  border: 1px solid var(--border-primary);
+  backdrop-filter: blur(4px);
+}
+
+.viewer-btn-group {
+  display: flex;
+  align-items: center;
+  gap: 1px; /* Gap for separation between buttons */
+  background: var(--border-secondary); /* Border color as background for gaps */
+  border: 1px solid var(--border-secondary);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.viewer-btn {
+  background: var(--bg-button); /* Solid background */
+  color: var(--text-secondary);
+  border: none;
+  padding: 0 12px; /* Increased horizontal padding */
+  cursor: pointer;
+  font-weight: 500;
+  font-size: 13px;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 36px; /* slightly taller */
+}
+
+/* Remove border-right as we use gap + background for separation now */
+.viewer-btn {
+  border-right: none;
+}
+
+.viewer-btn:hover:not(:disabled) {
+  background: var(--bg-button-hover);
+  color: var(--text-primary);
+}
+
+.viewer-btn:disabled {
+  background: var(--bg-secondary);
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.viewer-btn.active {
+  background: rgba(234, 179, 8, 0.2);
+  color: #facc15;
+  box-shadow: inset 0 0 8px rgba(234, 179, 8, 0.1);
+}
+
+.viewer-btn.active:hover {
+  background: rgba(234, 179, 8, 0.3);
+}
+
+.viewer-readout {
+  padding: 0 12px;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--text-primary);
+  background: var(--bg-secondary);
+  height: 36px;
+  display: flex;
+  align-items: center;
+  min-width: 48px;
+  justify-content: center;
+  font-weight: 600;
+}
+
+.viewer.zoom-enabled {
+  border-color: var(--border-accent);
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+}
+
+.viewer.zoomed {
+  border-color: rgba(239, 68, 68, 0.5);
+  box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.2);
+}
+
+.viewer .canvas:empty::before {
+  content: "Drop Gerber files here or click 'Open Gerbers / ZIP' to start";
+  color: var(--text-secondary);
+  font-style: italic;
+  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  border: 2px dashed var(--border-secondary);
+  border-radius: 8px;
+  background: rgba(15, 23, 42, 0.4);
+}

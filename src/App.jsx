@@ -29,6 +29,8 @@ import ToolOffsetCalibration from "./components/ToolOffsetCalibration.jsx";
 import { useSerialMachine } from "./hooks/useSerialMachine.js";
 import { useGerberFiles } from "./hooks/useGerberFiles.js";
 import AppHeader from "./components/AppHeader.jsx";
+import { ToastContainer, ConfirmDialog } from "./components/ToastNotification.jsx";
+import { toast, showConfirm } from "./lib/toast.js";
 
 function calculatePadCenter(p) {
   if (typeof p.x === "number" && typeof p.y === "number") {
@@ -152,7 +154,7 @@ export default function App() {
   // Move nozzle to the PCB's Gerber origin point in machine coordinates
   const goToPcbOrigin = useCallback(async () => {
     if (!window.serial?.writeLine) {
-      alert("Machine not connected.");
+      toast.warning("Machine not connected.");
       return;
     }
 
@@ -168,11 +170,11 @@ export default function App() {
       targetX = pcbOriginOffset.x;
       targetY = pcbOriginOffset.y;
     } else {
-      alert("No PCB origin set. Please solve fiducials or set an origin offset first.");
+      toast.warning("No PCB origin set. Please solve fiducials or set an origin offset first.");
       return;
     }
 
-    const confirmed = window.confirm(
+    const confirmed = await showConfirm(
       `Move nozzle to PCB Origin?\nTarget: X${targetX.toFixed(3)}, Y${targetY.toFixed(3)} mm`
     );
     if (!confirmed) return;
@@ -252,7 +254,7 @@ export default function App() {
   const handleAlignmentCapture = useCallback((refIndex) => {
     const currentMPos = livePreview.machinePosition;
     if (!currentMPos) {
-      alert("No machine position available. Connect machine first.");
+      toast.warning("No machine position available. Connect machine first.");
       return;
     }
 
@@ -277,7 +279,7 @@ export default function App() {
         // Guard against degenerate dimensions
         if (width < 1 || height < 1) {
           console.warn("Alignment failed: board dimensions too small or undefined", { width, height });
-          alert("Cannot compute alignment: board dimensions are invalid. Please load a board outline or paste layer first.");
+          toast.error("Cannot compute alignment: board dimensions are invalid. Please load a board outline or paste layer first.");
           return prev;
         }
         const designPts = [
@@ -1504,9 +1506,9 @@ export default function App() {
     }
 
     if (window.serial && window.serial.writeLine && xf && applyXf) {
-      setTimeout(() => {
+      setTimeout(async () => {
         const targetMachine = applyTransform(xf, padCenter);
-        const move = window.confirm(
+        const move = await showConfirm(
           `Pad Selected.${distInfo}\n\n` +
           `Drive camera perfectly to this pad now?\n` +
           `Machine Target: X${targetMachine.x.toFixed(3)} Y${targetMachine.y.toFixed(3)}`
@@ -1744,6 +1746,9 @@ export default function App() {
         onReset={resetEmergencyStop}
       />
 
+      <ToastContainer />
+      <ConfirmDialog />
+
       {/* ── BODY: Sidebar + Content ─────────────────────────── */}
       <div className="app-body">
         <aside className="sidebar">
@@ -1874,8 +1879,8 @@ export default function App() {
                 </div>
               )}
               <button className="btn primary" onClick={() => {
-                if (!selectedOrigin) { alert("Please load a Gerber file first."); return; }
-                if (!livePreview.machinePosition) { alert("Machine position unknown."); return; }
+                if (!selectedOrigin) { toast.warning("Please load a Gerber file first."); return; }
+                if (!livePreview.machinePosition) { toast.warning("Machine position unknown."); return; }
                 const lmp = livePreview.machinePosition;
                 const tOff = maintenanceManager.getToolOffset();
                 setPcbOriginOffset({ x: -(lmp.x + (tOff?.dx || 0)), y: -(lmp.y + (tOff?.dy || 0)) });
@@ -1902,28 +1907,28 @@ export default function App() {
                       if (referenceType === 'origin') {
                         if (applyXf && xf && selectedOrigin) t = applyTransform(xf, { x: selectedOrigin.x, y: selectedOrigin.y });
                         else if (pcbOriginOffset?.x || pcbOriginOffset?.y) t = { x: pcbOriginOffset.x, y: pcbOriginOffset.y };
-                        else { alert("No PCB origin mapped."); return; }
+                        else { toast.warning("No PCB origin mapped."); return; }
                       } else if (referenceType === 'fiducial' && referencePoint) {
                         const fid = fiducials.find(f => f.id === referencePoint.id);
                         if (fid?.machine) t = { x: fid.machine.x, y: fid.machine.y };
                         else if (applyXf && xf && fid?.design) t = applyTransform(xf, { x: fid.design.x, y: fid.design.y });
-                        else { alert(`Fiducial ${referencePoint.id} has no machine coordinate.`); return; }
+                        else { toast.warning(`Fiducial ${referencePoint.id} has no machine coordinate.`); return; }
                       }
-                      if (t && confirm(`Move to X${t.x.toFixed(3)} Y${t.y.toFixed(3)}?`)) {
+                      if (t && await showConfirm(`Move to X${t.x.toFixed(3)} Y${t.y.toFixed(3)}?`)) {
                         await window.serial?.writeLine(`G1 X${t.x.toFixed(3)} Y${t.y.toFixed(3)} F${speedSettings?.travelSpeed || 6000}`);
                       }
                     }}>Move To</button>
                   <button className="btn sm" disabled={!isSerialConnected}
                     onClick={async () => {
-                      if (confirm("Set Work Zero (G92 X0 Y0)?")) {
+                      if (await showConfirm("Set Work Zero (G92 X0 Y0)?")) {
                         const lmp = livePreview.machinePosition;
-                        if (!lmp) { alert("Machine position unknown."); return; }
+                        if (!lmp) { toast.warning("Machine position unknown."); return; }
                         const shiftX = -lmp.x, shiftY = -lmp.y;
                         await window.serial.writeLine("G92 X0 Y0");
                         setPcbOriginOffset({ x: 0, y: 0 });
                         setFiducials(prev => prev.map(f => f.machine ? { ...f, machine: { x: f.machine.x + shiftX, y: f.machine.y + shiftY } } : f));
                         setXf(null); setApplyXf(false);
-                        alert("Machine Zero Set!");
+                        toast.success("Machine Zero Set!");
                       }
                     }}>Set Zero</button>
                 </div>
@@ -1989,7 +1994,7 @@ export default function App() {
                     }}
                     onJobComplete={() => {
                       console.log('Dispensing job completed');
-                      alert('Dispensing job completed successfully!');
+                      toast.success('Dispensing job completed successfully!');
                     }}
                     onMachinePositionUpdate={handleMachinePositionUpdate}
                     machinePosition={machinePos}

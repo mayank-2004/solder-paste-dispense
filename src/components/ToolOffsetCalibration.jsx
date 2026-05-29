@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { toast, showConfirm } from '../lib/toast.js';
 
 const ToolOffsetCalibration = ({
     toolOffset,
@@ -13,13 +14,13 @@ const ToolOffsetCalibration = ({
     const [posB, setPosB] = useState(null); // Camera position
 
     const handleSetNeedle = () => {
-        if (!machinePosition) return alert("Machine position unknown! Please connect and home.");
+        if (!machinePosition) return toast.warning("Machine position unknown! Please connect and home.");
         setPosA({ ...machinePosition });
         setStep(2);
     };
 
     const handleSetCamera = () => {
-        if (!machinePosition) return alert("Machine position unknown!");
+        if (!machinePosition) return toast.warning("Machine position unknown!");
         setPosB({ ...machinePosition });
         setStep(3);
     };
@@ -32,9 +33,9 @@ const ToolOffsetCalibration = ({
         };
     };
 
-    const handleSaveOffset = () => {
+    const handleSaveOffset = async () => {
         const offset = calculateOffset();
-        if (window.confirm(`Save new Camera-to-Nozzle offset?\n\nDX: ${offset.dx.toFixed(3)} mm\nDY: ${offset.dy.toFixed(3)} mm`)) {
+        if (await showConfirm(`Save new Camera-to-Nozzle offset?\n\nDX: ${offset.dx.toFixed(3)} mm\nDY: ${offset.dy.toFixed(3)} mm`)) {
             setToolOffset(offset);
             setStep(4);
         }
@@ -102,7 +103,7 @@ const ToolOffsetCalibration = ({
                                     className="btn sm secondary"
                                     onClick={async () => {
                                         const success = await onAutoDetect();
-                                        if (!success) alert("Could not auto-detect dot! Please jog manually.");
+                                        if (!success) toast.warning("Could not auto-detect dot! Please jog manually.");
                                     }}
                                     disabled={!isConnected || step !== 2}
                                     title="Uses computer vision to find the dot and jog the machine to center it perfectly"

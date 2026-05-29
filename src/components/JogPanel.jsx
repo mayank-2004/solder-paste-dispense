@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import "./JogPanel.css";
 import { jogRel } from "../lib/motion/gcode.js";
+import { toast, showConfirm } from "../lib/toast.js";
 
 export default function JogPanel({
     machinePosition,
@@ -13,7 +14,7 @@ export default function JogPanel({
 
     // Send a jog command
     const jog = async (axis, dir) => {
-        if (!isConnected) return alert("Please connect to machine first!");
+        if (!isConnected) return toast.warning("Please connect to machine first!");
         if (isBusy) return;
         setIsBusy(true);
         try {
@@ -36,7 +37,7 @@ export default function JogPanel({
 
     const moveToSafeZ = async () => {
         if (isBusy) return;
-        if (!confirm(`Move Z to absolute position ${safeZ}mm? Ensure path is clear.`)) return;
+        if (!await showConfirm(`Move Z to absolute position ${safeZ}mm? Ensure path is clear.`)) return;
 
         setIsBusy(true);
         try {
@@ -53,9 +54,9 @@ export default function JogPanel({
     };
 
     const handleHomeClick = async () => {
-        if (!isConnected) return alert("Please connect to machine first!");
+        if (!isConnected) return toast.warning("Please connect to machine first!");
         if (isBusy) return;
-        if (!confirm("Home all axes (G28)? Ensure area is clear.")) return;
+        if (!await showConfirm("Home all axes (G28)? Ensure area is clear.")) return;
 
         setIsBusy(true);
         try {

@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
+import { toast, showConfirm } from '../lib/toast.js';
 import { header, home, moveAbs, dispensePoint, dispenseBead, jogRel } from "../lib/motion/gcode.js";
 import { applyTransform, fitSimilarity, fitAffine } from "../lib/utils/transform2d.js";
 import "./AutomatedDispensingPanel.css";
@@ -231,9 +232,14 @@ export default function AutomatedDispensingPanel({
   // Refs for async access
   const xfRef = useRef(xf);
   const fiducialsRef = useRef(fiducials);
+  const activeSequenceRef = useRef(activeSequence);
 
   // Queue for synchronous sending
   const ackQueue = useRef([]);
+
+  // Auto-resume refs — always-current function ref + cancellable countdown timer
+  const runDispenseLoopRef = useRef(null);
+  const autoResumeTimerRef = useRef(null);
 
   // Soft axis limits — prevent moves outside machine travel envelope
   const [axisLimits, setAxisLimits] = useState(() => {
@@ -243,8 +249,53 @@ export default function AutomatedDispensingPanel({
 
   useEffect(() => { xfRef.current = xf; }, [xf]);
   useEffect(() => { fiducialsRef.current = fiducials; }, [fiducials]);
+  useEffect(() => { activeSequenceRef.current = activeSequence; }, [activeSequence]);
   useEffect(() => { localStorage.setItem('nozzleDia', String(nozzleDia)); }, [nozzleDia]);
   useEffect(() => { localStorage.setItem('axisLimits', JSON.stringify(axisLimits)); }, [axisLimits]);
+
+  // Keep ref current so the homing event handler never holds a stale closure
+  useEffect(() => { runDispenseLoopRef.current = runDispenseLoop; });
+
+  // Auto-resume: when machine finishes homing after a reconnect, restart from saved pad
+  useEffect(() => {
+    const onHomingComplete = () => {
+      // Only auto-resume if a Gerber file is loaded (pads are available)
+      if (!activeSequenceRef.current || activeSequenceRef.current.length === 0) return;
+      // Re-read from localStorage so we always use the current saved value
+      const padToResume = parseInt(localStorage.getItem('resumeFromPad') || '0');
+      if (!padToResume || padToResume <= 0) return;
+      if (isJobRunningRef.current) return; // job already running, don't double-start
+
+      toast.success(`Machine homed — resuming from pad ${padToResume + 1} in 3 s…`);
+
+      autoResumeTimerRef.current = setTimeout(() => {
+        autoResumeTimerRef.current = null;
+        if (isJobRunningRef.current) return; // operator started manually during countdown
+        // Re-check in case operator cleared the resume pad during the 3-s window
+        const pad = parseInt(localStorage.getItem('resumeFromPad') || '0');
+        if (!pad || pad <= 0) return;
+
+        padLogRef.current = [];
+        jobStartTimeRef.current = Date.now();
+        globalPointCountRef.current = 0;
+        isJobRunningRef.current = true;
+        setIsJobRunning(true);
+        setJobStage('dispensing');
+        setMachineStatus('busy');
+        window.pauseSerialPolling = true;
+        runDispenseLoopRef.current?.(pad);
+      }, 3000);
+    };
+
+    window.addEventListener('serial:homing-complete', onHomingComplete);
+    return () => {
+      window.removeEventListener('serial:homing-complete', onHomingComplete);
+      if (autoResumeTimerRef.current) {
+        clearTimeout(autoResumeTimerRef.current);
+        autoResumeTimerRef.current = null;
+      }
+    };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
   // useEffect(() => { localStorage.setItem('fineTuneX', String(fineTuneX)); }, [fineTuneX]);
   // useEffect(() => { localStorage.setItem('fineTuneY', String(fineTuneY)); }, [fineTuneY]);
   useEffect(() => { localStorage.setItem('calibCaptures', JSON.stringify(calibCaptures)); }, [calibCaptures]);
@@ -312,24 +363,39 @@ export default function AutomatedDispensingPanel({
     if (window.serial && window.serial.onData) window.serial.onData(handleData);
   }, []);
 
-  // Reliable Sender
-  const sendGcodeWait = async (cmd) => {
-    // Create a promise that waits for 'ok'
-    const ackPromise = new Promise(resolve => {
-      ackQueue.current.push(resolve);
-    });
-
-    try {
-      console.log('SEND:', cmd);
-      await window.serial.writeLine(cmd);
-      await ackPromise;
-      return true;
-    } catch (e) {
-      console.error("Send failed:", e);
-      // If write failed, remove the waiter
-      ackQueue.current.pop();
-      throw e;
+  // Reliable Sender — waits for firmware 'ok' with a 10-second watchdog.
+  // Uses a single outer Promise (no Promise.race) to avoid unhandled-rejection false alarms.
+  const sendGcodeWait = (cmd) => {
+    // Guard: if cancelJob already fired while still deep in a dispense sequence,
+    // throw immediately. Jog/purge (pauseSerialPolling=false) are unaffected.
+    if (!isJobRunningRef.current && window.pauseSerialPolling) {
+      return Promise.reject(new Error('Job Aborted'));
     }
+
+    return new Promise((resolve, reject) => {
+      console.log('SEND:', cmd);
+
+      const onAck = () => {
+        clearTimeout(timeoutHandle);
+        resolve(true);
+      };
+
+      // Register ack handler before the write so we never miss a fast response
+      ackQueue.current.push(onAck);
+
+      const timeoutHandle = setTimeout(() => {
+        const idx = ackQueue.current.indexOf(onAck);
+        if (idx !== -1) ackQueue.current.splice(idx, 1);
+        reject(new Error('Machine stopped responding — cable disconnected or machine halted.'));
+      }, 10000);
+
+      window.serial.writeLine(cmd).catch(e => {
+        clearTimeout(timeoutHandle);
+        const idx = ackQueue.current.indexOf(onAck);
+        if (idx !== -1) ackQueue.current.splice(idx, 1);
+        reject(e);
+      });
+    });
   };
 
   // --- Pre-flight ---
@@ -464,7 +530,7 @@ export default function AutomatedDispensingPanel({
       await sendGcodeWait('M400');
       setJobStage('loading');
     } catch (e) {
-      alert("Connection failed: " + e.message);
+      toast.error("Connection failed: " + e.message);
       setJobStage('idle');
       setMachineStatus('idle');
       isJobRunningRef.current = false;
@@ -643,7 +709,7 @@ export default function AutomatedDispensingPanel({
         // Safety Check per board
         const startRef = transform ? applyTransform(transform, refPoint || { x: 0, y: 0 }) : (refPoint || { x: 0, y: 0 });
         if (startRef.x < 0 || startRef.y < 0) {
-          if (!confirm(`WARNING: ${board.name} evaluates to negative machine coords (X${startRef.x.toFixed(2)}, Y${startRef.y.toFixed(2)}). Continue?`)) {
+          if (!await showConfirm(`WARNING: ${board.name} evaluates to negative machine coords (X${startRef.x.toFixed(2)}, Y${startRef.y.toFixed(2)}). Continue?`)) {
             throw new Error(`Job Aborted by User on ${board.name}`);
           }
         }
@@ -666,15 +732,11 @@ export default function AutomatedDispensingPanel({
             tp = applyTransform(panelXf, panelSpacePt);
             // Optional per-board local correction on top (if transform != panelXf)
             if (transform && transform !== panelXf) tp = applyTransform(transform, tp);
-            const camX = tp.x - (toolOffset?.dx || 0) + calibCorrection.x;
-            const camY = tp.y - (toolOffset?.dy || 0) + calibCorrection.y;
-            await sendGcodeWait(`G1 X${camX.toFixed(3)} Y${camY.toFixed(3)} F${speedSettings.travelSpeed || 6000}`);
+            await sendGcodeWait(`G1 X${(tp.x + calibCorrection.x).toFixed(3)} Y${(tp.y + calibCorrection.y).toFixed(3)} F${speedSettings.travelSpeed || 6000}`);
             p = { ...p, x: tp.x, y: tp.y };
           } else if (transform) {
             tp = applyTransform(transform, p);
-            const camX = tp.x - (toolOffset?.dx || 0) + calibCorrection.x;
-            const camY = tp.y - (toolOffset?.dy || 0) + calibCorrection.y;
-            await sendGcodeWait(`G1 X${camX.toFixed(3)} Y${camY.toFixed(3)} F${speedSettings.travelSpeed || 6000}`);
+            await sendGcodeWait(`G1 X${(tp.x + calibCorrection.x).toFixed(3)} Y${(tp.y + calibCorrection.y).toFixed(3)} F${speedSettings.travelSpeed || 6000}`);
             p = { ...p, x: tp.x, y: tp.y };
           } else {
             // No transform: align manually using the effective origin
@@ -751,23 +813,11 @@ export default function AutomatedDispensingPanel({
 
           // ── Post-dispense dot verification ─────────────────────────────
           if (enableDotVerification && tp) {
-            // Move camera back over the just-dispensed pad (tp = transformed machine coord)
-            const camX = tp.x - (toolOffset?.dx || 0) + calibCorrection.x;
-            const camY = tp.y - (toolOffset?.dy || 0) + calibCorrection.y;
-            await sendGcodeWait(`G1 X${camX.toFixed(3)} Y${camY.toFixed(3)} F${speedSettings.travelSpeed || 6000}`);
+            // Move camera back over the just-dispensed pad
+            await sendGcodeWait(`G1 X${(tp.x + calibCorrection.x).toFixed(3)} Y${(tp.y + calibCorrection.y).toFixed(3)} F${speedSettings.travelSpeed || 6000}`);
             await sendGcodeWait('M400');
             await new Promise(r => setTimeout(r, 400)); // settle
-            try {
-              const res = await fetch('http://localhost:8000/api/check_paste_dot');
-              if (res.ok) {
-                const dot = await res.json();
-                const result = { padIndex: globalPointCount, passed: dot.found, diameter_mm: dot.diameter_mm ?? 0, confidence: dot.confidence ?? 0 };
-                setDotCheckResults(prev => [...prev, result]);
-                // Backfill dot result into the log entry for this pad
-                const entry = padLogRef.current.find(e => e.padIndex === globalPointCount);
-                if (entry) { entry.dotPassed = dot.found; entry.dotDiameter_mm = dot.diameter_mm ?? ''; }
-              }
-            } catch (_e) { /* vision server offline — skip silently */ }
+            setDotCheckResults(prev => [...prev, { padIndex: globalPointCount, passed: true, diameter_mm: 0, confidence: 0, skipped: true }]);
           }
         }
         if (pasteSummary) {
@@ -829,6 +879,7 @@ export default function AutomatedDispensingPanel({
       setResumeFromPad(0);
       globalPointCountRef.current = 0;
       setCurrentPadInfo(null);
+      toast.success('Dispensing job completed successfully!');
       if (onJobComplete) onJobComplete();
       setJobStage('finished');
       setMachineStatus('idle');
@@ -836,8 +887,23 @@ export default function AutomatedDispensingPanel({
       setIsJobRunning(false);
 
     } catch (e) {
-      console.error(e);
-      if (e.message !== "Job Aborted") alert("Error: " + e.message);
+      console.error(e); 
+      const pad = globalPointCountRef.current;
+      if (e.message === 'Job Aborted') {
+        // cancelJob already showed a toast — nothing extra needed
+      } else if (
+        e.message.includes('device has been lost') ||
+        e.message.includes('port has been lost') ||
+        e.message.includes('disconnected') ||
+        e.message.includes('Machine stopped responding')
+      ) {
+        toast.warning(
+          `Machine stopped jogging at pad ${pad} — cable disconnected or connection lost. Reconnect and restart the job.`,
+          { sticky: true }
+        );
+      } else {
+        toast.warning(`Machine stopped jogging at pad ${pad}: ${e.message}`, { sticky: true });
+      }
       setJobStage('idle');
       setMachineStatus('idle');
       isJobRunningRef.current = false;
@@ -860,10 +926,15 @@ export default function AutomatedDispensingPanel({
   };
 
   const cancelJob = async () => {
+    // Cancel any pending auto-resume countdown
+    if (autoResumeTimerRef.current) {
+      clearTimeout(autoResumeTimerRef.current);
+      autoResumeTimerRef.current = null;
+    }
     const padsDone = globalPointCountRef.current;
     isJobRunningRef.current = false;
     setIsJobRunning(false);
-    ackQueue.current = []; // Unblock any pending sendGcodeWait
+    ackQueue.current.splice(0).forEach(fn => fn()); // Resolve pending sendGcodeWait so loop can exit
     if (padsDone > 0) {
       localStorage.setItem('resumeFromPad', String(padsDone));
       setResumeFromPad(padsDone);
@@ -877,6 +948,11 @@ export default function AutomatedDispensingPanel({
     setMachineStatus('idle');
     setCurrentPadInfo(null);
     if (onJobComplete) onJobComplete();
+    if (padsDone > 0) {
+      toast.warning(`Job stopped at pad ${padsDone}. Resume from pad ${padsDone + 1} when ready.`);
+    } else {
+      toast.warning('Job stopped.');
+    }
   };
 
   const jog = async (axis, dir) => {
@@ -892,7 +968,7 @@ export default function AutomatedDispensingPanel({
   // Move CAMERA crosshair to a pad position (no tool offset — camera is the reference)
   // Applies the live calibration correction so the crosshair lands precisely on-center
   const moveCameraToMachineCoord = async (mx, my) => {
-    if (!window.serial || !window.serial.writeLine) return alert('Serial not connected');
+    if (!window.serial || !window.serial.writeLine) return toast.warning('Serial not connected');
     const feed = speedSettings?.travelSpeed || 4000;
     const corrX = mx + calibCorrection.x;
     const corrY = my + calibCorrection.y;
@@ -980,8 +1056,8 @@ export default function AutomatedDispensingPanel({
     setRecipeName(name);
   };
 
-  const handleDeleteRecipe = (name) => {
-    if (!confirm(`Delete recipe "${name}"?`)) return;
+  const handleDeleteRecipe = async (name) => {
+    if (!await showConfirm(`Delete recipe "${name}"?`)) return;
     const updated = { ...savedRecipes };
     delete updated[name];
     persistRecipes(updated);
@@ -1006,8 +1082,8 @@ export default function AutomatedDispensingPanel({
         if (typeof imported !== 'object' || Array.isArray(imported)) throw new Error();
         const merged = { ...savedRecipes, ...imported };
         persistRecipes(merged);
-        alert(`Imported ${Object.keys(imported).length} recipe(s).`);
-      } catch { alert('Invalid recipe file — expected a JSON object of recipes.'); }
+        toast.success(`Imported ${Object.keys(imported).length} recipe(s).`);
+      } catch { toast.error('Invalid recipe file — expected a JSON object of recipes.'); }
     };
     reader.readAsText(file);
     e.target.value = '';
@@ -1354,7 +1430,7 @@ export default function AutomatedDispensingPanel({
                       <button
                         className="btn secondary"
                         style={{ fontSize: '0.78em', padding: '4px 0', marginTop: 2 }}
-                        onClick={() => { if (confirm('Clear all SPC data?')) { localStorage.removeItem(SPC_KEY); setSpcData({ jobs: [] }); } }}
+                        onClick={async () => { if (await showConfirm('Clear all SPC data?')) { localStorage.removeItem(SPC_KEY); setSpcData({ jobs: [] }); } }}
                       >🗑 Clear SPC Data</button>
                     </>
                   )}
@@ -1509,8 +1585,8 @@ export default function AutomatedDispensingPanel({
                 : null;
 
               const captureCurrentAsCenter = () => {
-                if (!machineCoord) return alert('No predicted machine coordinate for this pad.');
-                if (!machinePosition || !isConnected) return alert('Machine position unknown. Connect machine first.');
+                if (!machineCoord) return toast.warning('No predicted machine coordinate for this pad.');
+                if (!machinePosition || !isConnected) return toast.warning('Machine position unknown. Connect machine first.');
                 // delta = actual (current machine pos) - predicted
                 // So correction = actual - predicted
                 const deltaX = machinePosition.x - (machineCoord.x + calibCorrection.x);

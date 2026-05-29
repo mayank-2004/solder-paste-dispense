@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { toast } from "../lib/toast.js";
 import "./SerialPanel.css";
 
 export default function SerialPanel({
@@ -19,6 +20,7 @@ export default function SerialPanel({
   const inputRef = useRef(null);
   const mPosRef = useRef(machinePosition);
   const hasReceivedPosRef = useRef(false);
+  const hasConnectedOnceRef = useRef(false);
 
   useEffect(() => {
     mPosRef.current = machinePosition;
@@ -80,13 +82,19 @@ export default function SerialPanel({
   }, []);
 
   const connect = async () => {
-    if (!path) return alert("Select a serial port first.");
+    if (!path) return toast.warning("Select a serial port first.");
     try {
       hasReceivedPosRef.current = false;
       setIsHoming(false);
       await window.serial.open({ path, baudRate: baud });
       // setConnected(true); // Removed
       if (onConnect) onConnect(); // Notify Parent
+      if (hasConnectedOnceRef.current) {
+        toast.success('Connection re-established.');
+      } else {
+        hasConnectedOnceRef.current = true;
+        toast.success('Connection established successfully.');
+      }
 
       startStatusQuery();
 
@@ -100,6 +108,7 @@ export default function SerialPanel({
           setTimeout(() => {
             setIsHoming(false);
             if (onHomingComplete) onHomingComplete();
+            window.dispatchEvent(new CustomEvent('serial:homing-complete'));
           }, 5000);
         } catch (e) {
           console.error(e);
@@ -107,7 +116,7 @@ export default function SerialPanel({
         }
       }, 2000);
     } catch (e) {
-      alert(`Failed to open ${path}: ${e.message}`);
+      toast.error(`Failed to open ${path}: ${e.message}`);
     }
   };
 
@@ -135,7 +144,7 @@ export default function SerialPanel({
     try {
       await window.serial.writeLine(cmd);
     } catch (e) {
-      alert(`Send failed: ${e.message || e}`);
+      toast.error(`Send failed: ${e.message || e}`);
     }
   };
 
@@ -153,7 +162,7 @@ export default function SerialPanel({
     try {
       await window.serial.sendGcode(text);
     } catch (err) {
-      alert(`Send file failed: ${err.message || err}`);
+      toast.error(`Send file failed: ${err.message || err}`);
     }
     e.target.value = '';
   };

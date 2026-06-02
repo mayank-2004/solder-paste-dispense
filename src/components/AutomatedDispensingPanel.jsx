@@ -113,7 +113,7 @@ export default function AutomatedDispensingPanel({
 }) {
   const [isJobRunning, setIsJobRunning] = useState(false);
   const isJobRunningRef = useRef(false);
-  const [resumeFromPad, setResumeFromPad] = useState(() => parseInt(localStorage.getItem('resumeFromPad') || '0'));
+  const [resumeFromPad, setResumeFromPad] = useState(0);
   const globalPointCountRef = useRef(0);
   const [jobMode, setJobMode] = useState('single'); // 'single' or 'batch'
   const [dynamicPanelCorrection, setDynamicPanelCorrection] = useState(true); // Default to ON if panelized
@@ -237,8 +237,9 @@ export default function AutomatedDispensingPanel({
   // Queue for synchronous sending
   const ackQueue = useRef([]);
 
-  // Auto-resume refs — always-current function ref + cancellable countdown timer
+  // Auto-resume refs — always-current function refs + cancellable countdown timer
   const runDispenseLoopRef = useRef(null);
+  const directResumeRef = useRef(null);
   const autoResumeTimerRef = useRef(null);
 
   // Soft axis limits — prevent moves outside machine travel envelope
@@ -253,8 +254,11 @@ export default function AutomatedDispensingPanel({
   useEffect(() => { localStorage.setItem('nozzleDia', String(nozzleDia)); }, [nozzleDia]);
   useEffect(() => { localStorage.setItem('axisLimits', JSON.stringify(axisLimits)); }, [axisLimits]);
 
-  // Keep ref current so the homing event handler never holds a stale closure
-  useEffect(() => { runDispenseLoopRef.current = runDispenseLoop; });
+  // Keep refs current so homing/resume handlers never hold stale closures
+  useEffect(() => {
+    runDispenseLoopRef.current = runDispenseLoop;
+    directResumeRef.current = directResume;
+  });
 
   // Auto-resume: when machine finishes homing after a reconnect, restart from saved pad
   useEffect(() => {
@@ -271,19 +275,7 @@ export default function AutomatedDispensingPanel({
       autoResumeTimerRef.current = setTimeout(() => {
         autoResumeTimerRef.current = null;
         if (isJobRunningRef.current) return; // operator started manually during countdown
-        // Re-check in case operator cleared the resume pad during the 3-s window
-        const pad = parseInt(localStorage.getItem('resumeFromPad') || '0');
-        if (!pad || pad <= 0) return;
-
-        padLogRef.current = [];
-        jobStartTimeRef.current = Date.now();
-        globalPointCountRef.current = 0;
-        isJobRunningRef.current = true;
-        setIsJobRunning(true);
-        setJobStage('dispensing');
-        setMachineStatus('busy');
-        window.pauseSerialPolling = true;
-        runDispenseLoopRef.current?.(pad);
+        directResumeRef.current?.();
       }, 3000);
     };
 
@@ -296,9 +288,31 @@ export default function AutomatedDispensingPanel({
       }
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Auto-resume on reconnect (no homing) — triggered by serial:connected from SerialPanel
+  useEffect(() => {
+    const onConnected = () => {
+      if (!activeSequenceRef.current || activeSequenceRef.current.length === 0) return;
+      const padToResume = parseInt(localStorage.getItem('resumeFromPad') || '0');
+      if (!padToResume || padToResume <= 0) return;
+      if (isJobRunningRef.current) return;
+      toast.success(`Reconnected — resuming from pad ${padToResume + 1} in 3 s…`);
+      autoResumeTimerRef.current = setTimeout(() => {
+        autoResumeTimerRef.current = null;
+        if (isJobRunningRef.current) return;
+        directResumeRef.current?.();
+      }, 3000);
+    };
+    window.addEventListener('serial:connected', onConnected);
+    return () => window.removeEventListener('serial:connected', onConnected);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   // useEffect(() => { localStorage.setItem('fineTuneX', String(fineTuneX)); }, [fineTuneX]);
   // useEffect(() => { localStorage.setItem('fineTuneY', String(fineTuneY)); }, [fineTuneY]);
   useEffect(() => { localStorage.setItem('calibCaptures', JSON.stringify(calibCaptures)); }, [calibCaptures]);
+
+  // Clear any stale resume pad from a previous session on first mount
+  useEffect(() => { localStorage.removeItem('resumeFromPad'); }, []);
 
   // Stabilize board dimension calculation
   const currentBoardSize = useMemo(() => {
@@ -387,7 +401,7 @@ export default function AutomatedDispensingPanel({
         const idx = ackQueue.current.indexOf(onAck);
         if (idx !== -1) ackQueue.current.splice(idx, 1);
         reject(new Error('Machine stopped responding — cable disconnected or machine halted.'));
-      }, 10000);
+      }, 2000);
 
       window.serial.writeLine(cmd).catch(e => {
         clearTimeout(timeoutHandle);
@@ -514,6 +528,25 @@ export default function AutomatedDispensingPanel({
   // --- Flow Logic ---
   const startJobFlow = () => {
     setJobStage('preflight');
+  };
+
+  // Bypass preflight and jump straight into dispensing from a saved pad.
+  // Reads from localStorage (synchronously updated) rather than React state
+  // to avoid stale-closure bugs when called after a cable-pull.
+  const directResume = (explicitPad) => {
+    const pad = (explicitPad != null && explicitPad > 0)
+      ? explicitPad
+      : parseInt(localStorage.getItem('resumeFromPad') || '0');
+    if (!pad || pad <= 0) return;
+    padLogRef.current = [];
+    jobStartTimeRef.current = Date.now();
+    globalPointCountRef.current = pad;
+    isJobRunningRef.current = true;
+    setIsJobRunning(true);
+    setJobStage('dispensing');
+    setMachineStatus('busy');
+    window.pauseSerialPolling = true;
+    runDispenseLoop(pad);
   };
 
   const proceedFromPreflight = async () => {
@@ -840,7 +873,7 @@ export default function AutomatedDispensingPanel({
           avgDwellMs: baseDwellTime,
           basePressure: localPressure,
           dotsFailed: enableDotVerification ? failed : null,
-          dotsChecked: enableDotVerification ? prev.length : null,
+          dotsChecked: enableDotVerification ? startFromPad + prev.length : null,
           probedSurfaceZ: probedSurfaceZRef.current,
         });
         // Persist dot quality to SPC store
@@ -879,6 +912,7 @@ export default function AutomatedDispensingPanel({
       setResumeFromPad(0);
       globalPointCountRef.current = 0;
       setCurrentPadInfo(null);
+      window.dispatchEvent(new CustomEvent('machine:homed')); // machine is at known position
       toast.success('Dispensing job completed successfully!');
       if (onJobComplete) onJobComplete();
       setJobStage('finished');
@@ -891,18 +925,27 @@ export default function AutomatedDispensingPanel({
       const pad = globalPointCountRef.current;
       if (e.message === 'Job Aborted') {
         // cancelJob already showed a toast — nothing extra needed
-      } else if (
-        e.message.includes('device has been lost') ||
-        e.message.includes('port has been lost') ||
-        e.message.includes('disconnected') ||
-        e.message.includes('Machine stopped responding')
-      ) {
-        toast.warning(
-          `Machine stopped jogging at pad ${pad} — cable disconnected or connection lost. Reconnect and restart the job.`,
-          { sticky: true }
-        );
       } else {
-        toast.warning(`Machine stopped jogging at pad ${pad}: ${e.message}`, { sticky: true });
+        // Always save the current pad so auto-resume after reconnect starts from the right position.
+        // This overwrites any earlier manual-stop pad that may still be in localStorage.
+        if (pad > 0) {
+          localStorage.setItem('resumeFromPad', String(pad));
+          setResumeFromPad(pad);
+        }
+        if (
+          e.message.includes('device has been lost') ||
+          e.message.includes('port has been lost') ||
+          e.message.includes('disconnected') ||
+          e.message.includes('Machine stopped responding')
+        ) {
+          window.dispatchEvent(new CustomEvent('serial:connection-lost'));
+          toast.warning(
+            `Machine stopped jogging at pad ${pad} — cable disconnected. Reconnecting automatically…`,
+            { sticky: true }
+          );
+        } else {
+          toast.warning(`Machine stopped jogging at pad ${pad}: ${e.message}`, { sticky: true });
+        }
       }
       setJobStage('idle');
       setMachineStatus('idle');
@@ -1703,7 +1746,7 @@ export default function AutomatedDispensingPanel({
                       className="btn primary"
                       style={{ flex: 1, fontSize: '0.85em' }}
                       disabled={!isConnected}
-                      onClick={startJobFlow}
+                      onClick={() => directResume()}
                     >
                       Resume from pad {resumeFromPad + 1}
                     </button>

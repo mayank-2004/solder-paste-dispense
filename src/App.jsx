@@ -191,6 +191,14 @@ export default function App() {
   const [isHomed, setIsHomed] = useState(false);
   const [isJobRunning, setIsJobRunning] = useState(false);
 
+  // Lightweight homed signal — just marks position as known, no machine movement.
+  // Used after job completion and manual G28 (vs handleHomingComplete which also auto-moves to PCB origin).
+  useEffect(() => {
+    const onMachineHomed = () => setIsHomed(true);
+    window.addEventListener('machine:homed', onMachineHomed);
+    return () => window.removeEventListener('machine:homed', onMachineHomed);
+  }, []);
+
   const handleHomingComplete = useCallback(async () => {
     setIsHomed(true);
     const { xf: curXf, applyXf: curApplyXf, selectedOrigin: curOrigin, pcbOriginOffset: curOffset } = originStateRef.current;

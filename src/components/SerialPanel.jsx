@@ -8,23 +8,40 @@ export default function SerialPanel({
   onConnect,
   onDisconnect,
   onHomingComplete,
-  machinePosition = { x: 0, y: 0, z: 0 } // Default for safety
+  machinePosition = { x: 0, y: 0, z: 0 }
 }) {
   const [ports, setPorts] = useState([]);
   const [path, setPath] = useState('');
   const [baud, setBaud] = useState(115200);
-  // const [connected, setConnected] = useState(false); // Removed local state
   const [consoleLines, setConsoleLines] = useState([]);
   const [isHoming, setIsHoming] = useState(false);
+  const [isReconnecting, setIsReconnecting] = useState(false);
 
   const inputRef = useRef(null);
   const mPosRef = useRef(machinePosition);
   const hasReceivedPosRef = useRef(false);
   const hasConnectedOnceRef = useRef(false);
 
-  useEffect(() => {
-    mPosRef.current = machinePosition;
-  }, [machinePosition]);
+  // Auto-reconnect state
+  const isIntentionalDisconnectRef = useRef(false); // true when operator clicks Disconnect
+  const reconnectIntervalRef = useRef(null);
+  const reconnectTargetRef = useRef('');  // port path to watch for
+  const baudRef = useRef(baud);           // current baud, safe inside interval closure
+  const pathRef = useRef(path);           // current path, safe inside event handler closure
+
+  // Prop refs — stable handles for closures registered once
+  const onConnectRef = useRef(onConnect);
+  const onDisconnectRef = useRef(onDisconnect);
+  const onHomingCompleteRef = useRef(onHomingComplete);
+  useEffect(() => { onConnectRef.current = onConnect; }, [onConnect]);
+  useEffect(() => { onDisconnectRef.current = onDisconnect; }, [onDisconnect]);
+  useEffect(() => { onHomingCompleteRef.current = onHomingComplete; }, [onHomingComplete]);
+
+  useEffect(() => { mPosRef.current = machinePosition; }, [machinePosition]);
+  useEffect(() => { baudRef.current = baud; }, [baud]);
+  useEffect(() => { pathRef.current = path; }, [path]);
+
+  // ── Serial port list ────────────────────────────────────────────────────────
 
   const refresh = async () => {
     try {
@@ -39,25 +56,24 @@ export default function SerialPanel({
   };
 
   useEffect(() => { refresh(); }, []);
+
+  // ── Incoming serial data handler ─────────────────────────────────────────────
+
   useEffect(() => {
     window.serial.onData((line) => {
       const ts = new Date().toISOString();
       const isStatusPos = line.match(/X\s*:\s*([-\d.]+)/i) || line.match(/MPos:([-\d.]+)/);
-      // Optional: hide M114 responses if they spam too much, but for now we'll format them all
-      // as per request if they aren't purely repetitive. We will just format it.
       if (!isStatusPos) {
         setConsoleLines((prev) => [...prev, `[RECE] - ${ts} - ${line}`].slice(-500));
       }
 
       let x = null, y = null, z = null;
-      // Try Marlin format
       const marlinMatch = line.match(/X\s*:\s*([-\d.]+).*?Y\s*:\s*([-\d.]+).*?Z\s*:\s*([-\d.]+)/i);
       if (marlinMatch) {
         x = parseFloat(marlinMatch[1]);
         y = parseFloat(marlinMatch[2]);
         z = parseFloat(marlinMatch[3]);
       } else {
-        // Try GRBL format
         const grblMatch = line.match(/MPos:([-\d.]+),([-\d.]+),([-\d.]+)/);
         if (grblMatch) {
           x = parseFloat(grblMatch[1]);
@@ -68,10 +84,9 @@ export default function SerialPanel({
 
       if (x !== null && y !== null && z !== null) {
         hasReceivedPosRef.current = true;
-        const pos = { x, y, z };
-        if (onMachinePositionUpdate) onMachinePositionUpdate(pos);
+        if (onMachinePositionUpdate) onMachinePositionUpdate({ x, y, z });
       }
-      // Bridge for BedCalibrationPanel auto-probe (M119 endstop response)
+
       if (line.includes('z_min:')) {
         const triggered = /z_min:\s*TRIGGERED/i.test(line);
         window.dispatchEvent(new CustomEvent(
@@ -81,61 +96,146 @@ export default function SerialPanel({
     });
   }, []);
 
-  const connect = async () => {
-    if (!path) return toast.warning("Select a serial port first.");
+  // ── Auto-reconnect helpers ───────────────────────────────────────────────────
+
+  const stopAutoReconnect = () => {
+    if (reconnectIntervalRef.current) {
+      clearInterval(reconnectIntervalRef.current);
+      reconnectIntervalRef.current = null;
+    }
+    setIsReconnecting(false);
+  };
+
+  const startAutoReconnect = (targetPath) => {
+    if (!targetPath) return;
+    stopAutoReconnect();
+    reconnectTargetRef.current = targetPath;
+    setIsReconnecting(true);
+
+    reconnectIntervalRef.current = setInterval(async () => {
+      if (isIntentionalDisconnectRef.current) {
+        stopAutoReconnect();
+        return;
+      }
+      try {
+        const list = await window.serial.list();
+        const found = list.some(p => p.path === reconnectTargetRef.current);
+        if (found) {
+          stopAutoReconnect();
+          await connectTo(reconnectTargetRef.current, baudRef.current);
+        }
+      } catch { /* ignore — port not ready yet */ }
+    }, 2000);
+  };
+
+  // Cleanup poller on unmount
+  useEffect(() => () => stopAutoReconnect(), []);
+
+  // ── Connection logic ─────────────────────────────────────────────────────────
+
+  // Core connect — used by both the button and the auto-reconnect poller.
+  const connectTo = async (targetPath, targetBaud) => {
+    if (!targetPath) return toast.warning("Select a serial port first.");
     try {
       hasReceivedPosRef.current = false;
       setIsHoming(false);
-      await window.serial.open({ path, baudRate: baud });
-      // setConnected(true); // Removed
-      if (onConnect) onConnect(); // Notify Parent
-      if (hasConnectedOnceRef.current) {
-        toast.success('Connection re-established.');
-      } else {
+      await window.serial.open({ path: targetPath, baudRate: targetBaud });
+      if (onConnectRef.current) onConnectRef.current();
+
+      const isReconnect = hasConnectedOnceRef.current;
+      if (!isReconnect) {
         hasConnectedOnceRef.current = true;
         toast.success('Connection established successfully.');
       }
 
       startStatusQuery();
 
-      // Auto-Home
-      setTimeout(async () => {
-        try {
-          console.log("Sending G28 auto-home...");
-          setIsHoming(true);
-          await window.serial.writeLine('G28');
-          // Clear homing status after a reasonable time since we are no longer tracking reach
-          setTimeout(() => {
+      if (isReconnect) {
+        // Reconnect path — skip homing, resume directly
+        window.dispatchEvent(new CustomEvent('serial:connected'));
+      } else {
+        // First connect — home so position is known
+        setTimeout(async () => {
+          try {
+            setIsHoming(true);
+            await window.serial.writeLine('G28');
+            setTimeout(() => {
+              setIsHoming(false);
+              if (onHomingCompleteRef.current) onHomingCompleteRef.current();
+              window.dispatchEvent(new CustomEvent('serial:homing-complete'));
+            }, 5000);
+          } catch (e) {
+            console.error(e);
             setIsHoming(false);
-            if (onHomingComplete) onHomingComplete();
-            window.dispatchEvent(new CustomEvent('serial:homing-complete'));
-          }, 5000);
-        } catch (e) {
-          console.error(e);
-          setIsHoming(false);
-        }
-      }, 2000);
+          }
+        }, 2000);
+      }
     } catch (e) {
-      toast.error(`Failed to open ${path}: ${e.message}`);
+      toast.error(`Failed to open ${targetPath}: ${e.message}`);
+      // If this was an auto-reconnect attempt and the port vanished again, keep polling
+      if (!isIntentionalDisconnectRef.current) {
+        startAutoReconnect(targetPath);
+      }
     }
   };
 
-  const startStatusQuery = () => {
-    const interval = setInterval(async () => {
-      if (window.pauseSerialPolling) return; // Prevent background M114s causing 'ok' spam
-      try {
-        await window.serial.writeLine('M114');
-      } catch { /* ignore */ }
-    }, 500);
-    return interval;
+  // Manual connect button handler
+  const connect = async () => {
+    isIntentionalDisconnectRef.current = false;
+    stopAutoReconnect();
+    await connectTo(path, baud);
   };
 
+  // Manual disconnect button handler — must NOT trigger auto-reconnect
   const disconnect = async () => {
+    isIntentionalDisconnectRef.current = true;
+    stopAutoReconnect();
     try { await window.serial.close(); } catch { }
     setIsHoming(false);
-    // setConnected(false); // Removed
-    if (onDisconnect) onDisconnect();
+    if (onDisconnectRef.current) onDisconnectRef.current();
   };
+
+  // ── Cable-pull handler (dispatched by AutomatedDispensingPanel) ─────────────
+
+  useEffect(() => {
+    const onConnectionLost = async () => {
+      if (isIntentionalDisconnectRef.current) return;
+      const targetPath = pathRef.current;
+      // Close port on Electron side so it can be re-opened cleanly
+      try { await window.serial.close(); } catch { }
+      if (onDisconnectRef.current) onDisconnectRef.current();
+      startAutoReconnect(targetPath);
+    };
+
+    window.addEventListener('serial:connection-lost', onConnectionLost);
+    return () => window.removeEventListener('serial:connection-lost', onConnectionLost);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── M114 status polling ──────────────────────────────────────────────────────
+
+  const startStatusQuery = () => {
+    let consecutiveFailures = 0;
+    setInterval(async () => {
+      if (window.pauseSerialPolling) return; // job is running — cable-pull detected by sendGcodeWait
+      try {
+        await window.serial.writeLine('M114');
+        consecutiveFailures = 0;
+      } catch {
+        consecutiveFailures++;
+        // 3 consecutive failures ≈ 1.5 s — port is gone
+        if (
+          consecutiveFailures >= 3 &&
+          !isIntentionalDisconnectRef.current &&
+          reconnectIntervalRef.current === null // not already reconnecting
+        ) {
+          consecutiveFailures = 0;
+          window.dispatchEvent(new CustomEvent('serial:connection-lost'));
+        }
+      }
+    }, 500);
+  };
+
+  // ── Manual G-code send ───────────────────────────────────────────────────────
 
   const sendCommand = async (cmd) => {
     if (!isConnected) return;
@@ -167,12 +267,23 @@ export default function SerialPanel({
     e.target.value = '';
   };
 
+  // ── Render ───────────────────────────────────────────────────────────────────
+
   return (
     <div className="panel serial-panel">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <h3>
           Machine Connectivity
-          {isConnected && <span style={{ fontSize: '0.6em', background: '#28a745', color: 'white', padding: '2px 6px', borderRadius: 4, marginLeft: 8, verticalAlign: 'middle' }}>CONNECTED</span>}
+          {isConnected && (
+            <span style={{ fontSize: '0.6em', background: '#28a745', color: 'white', padding: '2px 6px', borderRadius: 4, marginLeft: 8, verticalAlign: 'middle' }}>
+              CONNECTED
+            </span>
+          )}
+          {isReconnecting && !isConnected && (
+            <span style={{ fontSize: '0.6em', background: '#e3b341', color: 'black', padding: '2px 6px', borderRadius: 4, marginLeft: 8, verticalAlign: 'middle', animation: 'pulse 1.5s infinite' }}>
+              RECONNECTING…
+            </span>
+          )}
         </h3>
 
         {/* Machine Position Display */}
@@ -188,14 +299,9 @@ export default function SerialPanel({
             </span>
           )}
           <div style={{
-            background: '#222',
-            color: '#0f0',
-            fontFamily: 'monospace',
-            padding: '4px 8px',
-            borderRadius: 4,
-            fontSize: '0.9em',
-            display: 'flex',
-            gap: '12px'
+            background: '#222', color: '#0f0', fontFamily: 'monospace',
+            padding: '4px 8px', borderRadius: 4, fontSize: '0.9em',
+            display: 'flex', gap: '12px',
           }}>
             <span>X: {machinePosition.x.toFixed(2)}</span>
             <span>Y: {machinePosition.y.toFixed(2)}</span>
@@ -205,28 +311,26 @@ export default function SerialPanel({
       </div>
 
       <div className="flex-row" style={{ marginTop: 8, paddingBottom: 16, borderBottom: '1px solid #444', flexWrap: 'wrap', gap: '8px' }}>
-        <button className="btn secondary" onClick={refresh}>Refresh</button>
+        <button className="btn secondary" onClick={refresh} disabled={isReconnecting}>Refresh</button>
 
-        <select value={baud} onChange={e => setBaud(Number(e.target.value))} style={{ width: 100 }}>
+        <select value={baud} onChange={e => setBaud(Number(e.target.value))} style={{ width: 100 }} disabled={isConnected || isReconnecting}>
           <option value={115200}>115200</option>
           <option value={250000}>250000</option>
           <option value={57600}>57600</option>
           <option value={9600}>9600</option>
         </select>
 
-        <select value={path} onChange={e => setPath(e.target.value)} style={{ minWidth: 220, flex: 1 }}>
+        <select value={path} onChange={e => setPath(e.target.value)} style={{ minWidth: 220, flex: 1 }} disabled={isConnected || isReconnecting}>
           {ports.length === 0
             ? <option value="">(no serial ports found)</option>
             : ports.map(p => (
-              <option key={p.path} value={p.path}>
-                {p.friendly || p.path}
-              </option>
+              <option key={p.path} value={p.path}>{p.friendly || p.path}</option>
             ))
           }
         </select>
 
-        <button className="btn" onClick={connect} disabled={!path || isConnected}>Connect</button>
-        <button className="btn secondary" onClick={disconnect} disabled={!isConnected}>Disconnect</button>
+        <button className="btn" onClick={connect} disabled={!path || isConnected || isReconnecting}>Connect</button>
+        <button className="btn secondary" onClick={disconnect} disabled={!isConnected && !isReconnecting}>Disconnect</button>
 
         <label className="btn">
           Send file
@@ -238,26 +342,10 @@ export default function SerialPanel({
         {/* Left Panel: Control Grid */}
         <div className="control-pane">
           <h3>Control</h3>
-          {/* <div className="control-grid-3">
-            <button className="btn-dark" onClick={() => sendCommand('M8')}>Left Air On</button>
-            <button className="btn-dark" onClick={() => sendCommand('M8')}>Right Air On</button>
-            <button className="btn-dark" onClick={() => sendCommand('M8')}>Ring Lights On</button>
- 
-            <button className="btn-dark" onClick={() => sendCommand('M9')}>Left Air Off</button>
-            <button className="btn-dark" onClick={() => sendCommand('M9')}>Right Air Off</button>
-            <button className="btn-dark" onClick={() => sendCommand('M9')}>Ring Lights Off</button>
-
-            <button className="btn-dark" onClick={() => sendCommand('M8')}>Left Vac</button>
-            <button className="btn-dark" onClick={() => sendCommand('M8')}>Right Vac</button>
-            <button className="btn-dark" onClick={() => sendCommand('M18')}>Disable<br />Steppers</button>
-          </div> */}
-
           <div className="control-grid-5" style={{ marginTop: 'auto' }}>
-            <button className="btn-dark small" onClick={() => sendCommand('G28 X')}>Home<br />X</button>
-            <button className="btn-dark small" onClick={() => sendCommand('G28 Y')}>Home<br />Y</button>
-            <button className="btn-dark small" onClick={() => sendCommand('G28 Z')}>Home<br />Z</button>
-            {/* <button className="btn-dark small" onClick={() => sendCommand('G0 X200')}>Jog<br/>Max</button>
-            <button className="btn-dark small" onClick={() => sendCommand('G0 X0')}>Jog<br/>Min</button> */}
+            <button className="btn-dark small" onClick={() => { sendCommand('G28 X'); window.dispatchEvent(new CustomEvent('machine:homed')); }}>Home<br />X</button>
+            <button className="btn-dark small" onClick={() => { sendCommand('G28 Y'); window.dispatchEvent(new CustomEvent('machine:homed')); }}>Home<br />Y</button>
+            <button className="btn-dark small" onClick={() => { sendCommand('G28 Z'); window.dispatchEvent(new CustomEvent('machine:homed')); }}>Home<br />Z</button>
           </div>
         </div>
 

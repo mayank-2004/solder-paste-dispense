@@ -2,6 +2,8 @@ const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('fs', {
   saveJobLog: (opts) => ipcRenderer.invoke('fs:saveJobLog', opts),
+  saveSettings: (data) => ipcRenderer.invoke('fs:saveSettings', data),
+  loadSettings: () => ipcRenderer.invoke('fs:loadSettings'),
 });
 
 contextBridge.exposeInMainWorld('serial', {
@@ -16,5 +18,10 @@ contextBridge.exposeInMainWorld('serial', {
         const subscription = (_evt, line) => handler(line);
         ipcRenderer.on('serial:data', subscription);
         return () => ipcRenderer.removeListener('serial:data', subscription);
+    },
+    onPortClosed: (handler) => {
+        const subscription = () => handler();
+        ipcRenderer.on('serial:port-closed', subscription);
+        return () => ipcRenderer.removeListener('serial:port-closed', subscription);
     }
 });

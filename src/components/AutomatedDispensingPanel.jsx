@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { toast, showConfirm } from '../lib/toast.js';
 import { header, home, moveAbs, dispensePoint, dispenseBead, jogRel } from "../lib/motion/gcode.js";
 import { applyTransform, fitSimilarity, fitAffine } from "../lib/utils/transform2d.js";
@@ -7,7 +8,7 @@ import { buildJobPasteSummary, PasteStore } from '../lib/paste/pasteTracker.js';
 import { getZOffsetForPoint } from './BedCalibrationPanel.jsx';
 import PasteGauge from './PasteGauge.jsx';
 import MaintenanceManager from './MaintenanceManager.jsx';
-import { NozzleMaintenanceManager } from '../lib/maintenance/nozzleMaintenance.js';
+import { NozzleMaintenanceManager, computeNozzleHealth } from '../lib/maintenance/nozzleMaintenance.js';
 
 const nozzleMaintenance = new NozzleMaintenanceManager();
 
@@ -241,6 +242,9 @@ export default function AutomatedDispensingPanel({
   const runDispenseLoopRef = useRef(null);
   const directResumeRef = useRef(null);
   const autoResumeTimerRef = useRef(null);
+  const autoResumeCountIntervalRef = useRef(null);
+  const startAutoResumeRef = useRef(null);
+  const [autoResumeCountdown, setAutoResumeCountdown] = useState(0);
 
   // Soft axis limits — prevent moves outside machine travel envelope
   const [axisLimits, setAxisLimits] = useState(() => {
@@ -251,6 +255,21 @@ export default function AutomatedDispensingPanel({
   useEffect(() => { xfRef.current = xf; }, [xf]);
   useEffect(() => { fiducialsRef.current = fiducials; }, [fiducials]);
   useEffect(() => { activeSequenceRef.current = activeSequence; }, [activeSequence]);
+
+  // On mount: load settings from file (survives Chromium profile resets) and override localStorage defaults
+  useEffect(() => {
+    window.fs?.loadSettings?.().then(res => {
+      if (!res?.ok || !res.data) return;
+      const s = res.data;
+      if (s.nozzleDia        != null) setNozzleDia(s.nozzleDia);
+      if (s.axisLimits       != null) setAxisLimits(s.axisLimits);
+      if (s.calibCaptures    != null) setCalibCaptures(s.calibCaptures);
+      if (s.pasteRecipes     != null) setSavedRecipes(s.pasteRecipes);
+    });
+    localStorage.removeItem('resumeFromPad');
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Persist settings to file whenever they change (file survives profile wipe; localStorage is the fast cache)
   useEffect(() => { localStorage.setItem('nozzleDia', String(nozzleDia)); }, [nozzleDia]);
   useEffect(() => { localStorage.setItem('axisLimits', JSON.stringify(axisLimits)); }, [axisLimits]);
 
@@ -258,34 +277,24 @@ export default function AutomatedDispensingPanel({
   useEffect(() => {
     runDispenseLoopRef.current = runDispenseLoop;
     directResumeRef.current = directResume;
+    startAutoResumeRef.current = startAutoResumeCountdown;
   });
 
   // Auto-resume: when machine finishes homing after a reconnect, restart from saved pad
   useEffect(() => {
     const onHomingComplete = () => {
-      // Only auto-resume if a Gerber file is loaded (pads are available)
       if (!activeSequenceRef.current || activeSequenceRef.current.length === 0) return;
-      // Re-read from localStorage so we always use the current saved value
       const padToResume = parseInt(localStorage.getItem('resumeFromPad') || '0');
       if (!padToResume || padToResume <= 0) return;
-      if (isJobRunningRef.current) return; // job already running, don't double-start
-
-      toast.success(`Machine homed — resuming from pad ${padToResume + 1} in 3 s…`);
-
-      autoResumeTimerRef.current = setTimeout(() => {
-        autoResumeTimerRef.current = null;
-        if (isJobRunningRef.current) return; // operator started manually during countdown
-        directResumeRef.current?.();
-      }, 3000);
+      if (isJobRunningRef.current) return;
+      startAutoResumeRef.current?.(padToResume, 'Machine homed');
     };
 
     window.addEventListener('serial:homing-complete', onHomingComplete);
     return () => {
       window.removeEventListener('serial:homing-complete', onHomingComplete);
-      if (autoResumeTimerRef.current) {
-        clearTimeout(autoResumeTimerRef.current);
-        autoResumeTimerRef.current = null;
-      }
+      if (autoResumeTimerRef.current) { clearTimeout(autoResumeTimerRef.current); autoResumeTimerRef.current = null; }
+      if (autoResumeCountIntervalRef.current) { clearInterval(autoResumeCountIntervalRef.current); autoResumeCountIntervalRef.current = null; }
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -296,23 +305,34 @@ export default function AutomatedDispensingPanel({
       const padToResume = parseInt(localStorage.getItem('resumeFromPad') || '0');
       if (!padToResume || padToResume <= 0) return;
       if (isJobRunningRef.current) return;
-      toast.success(`Reconnected — resuming from pad ${padToResume + 1} in 3 s…`);
-      autoResumeTimerRef.current = setTimeout(() => {
-        autoResumeTimerRef.current = null;
-        if (isJobRunningRef.current) return;
-        directResumeRef.current?.();
-      }, 3000);
+      startAutoResumeRef.current?.(padToResume, 'Reconnected');
     };
     window.addEventListener('serial:connected', onConnected);
     return () => window.removeEventListener('serial:connected', onConnected);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Drain ackQueue immediately when cable is lost so sendGcodeWait rejects fast (< 1 s)
+  // instead of waiting for the 30 s watchdog timeout.
+  useEffect(() => {
+    const onConnectionLost = () => {
+      const err = new Error('Cable disconnected — machine connection lost.');
+      ackQueue.current.splice(0).forEach(e => e.nak(err));
+    };
+    window.addEventListener('serial:connection-lost', onConnectionLost);
+    return () => window.removeEventListener('serial:connection-lost', onConnectionLost);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // useEffect(() => { localStorage.setItem('fineTuneX', String(fineTuneX)); }, [fineTuneX]);
   // useEffect(() => { localStorage.setItem('fineTuneY', String(fineTuneY)); }, [fineTuneY]);
   useEffect(() => { localStorage.setItem('calibCaptures', JSON.stringify(calibCaptures)); }, [calibCaptures]);
 
-  // Clear any stale resume pad from a previous session on first mount
-  useEffect(() => { localStorage.removeItem('resumeFromPad'); }, []);
+  // Persist key settings to file so they survive Chromium profile resets
+  useEffect(() => {
+    const t = setTimeout(() => {
+      window.fs?.saveSettings?.({ nozzleDia, axisLimits, calibCaptures, pasteRecipes: savedRecipes });
+    }, 500); // debounce — avoid hammering disk on rapid slider moves
+    return () => clearTimeout(t);
+  }, [nozzleDia, axisLimits, calibCaptures, savedRecipes]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Stabilize board dimension calculation
   const currentBoardSize = useMemo(() => {
@@ -370,16 +390,19 @@ export default function AutomatedDispensingPanel({
 
       // 3. Handle ACKs (Marlin/GRBL sends 'ok')
       if (line.trim().startsWith('ok')) {
-        const resolver = ackQueue.current.shift();
-        if (resolver) resolver(true);
+        const entry = ackQueue.current.shift();
+        if (entry) entry.ack();
       }
     };
     if (window.serial && window.serial.onData) window.serial.onData(handleData);
   }, []);
 
-  // Reliable Sender — waits for firmware 'ok' with a 10-second watchdog.
-  // Uses a single outer Promise (no Promise.race) to avoid unhandled-rejection false alarms.
-  const sendGcodeWait = (cmd) => {
+  // Reliable Sender — waits for firmware 'ok'.
+  // Default watchdog is 30 s — long enough for Marlin buffer flow-control stalls and any
+  // real machine operation. Cable-pull during an active job is detected immediately via
+  // writeLine() rejecting (OS drops the port); this timer is only a last-resort guard for
+  // a frozen machine. Callers with known bounded durations (G4, G38.2) pass an explicit value.
+  const sendGcodeWait = (cmd, timeoutMs = 30000) => {
     // Guard: if cancelJob already fired while still deep in a dispense sequence,
     // throw immediately. Jog/purge (pauseSerialPolling=false) are unaffected.
     if (!isJobRunningRef.current && window.pauseSerialPolling) {
@@ -389,23 +412,23 @@ export default function AutomatedDispensingPanel({
     return new Promise((resolve, reject) => {
       console.log('SEND:', cmd);
 
-      const onAck = () => {
-        clearTimeout(timeoutHandle);
-        resolve(true);
+      const entry = {
+        ack: () => { clearTimeout(timeoutHandle); resolve(true); },
+        nak: (err) => { clearTimeout(timeoutHandle); reject(err); },
       };
 
       // Register ack handler before the write so we never miss a fast response
-      ackQueue.current.push(onAck);
+      ackQueue.current.push(entry);
 
       const timeoutHandle = setTimeout(() => {
-        const idx = ackQueue.current.indexOf(onAck);
+        const idx = ackQueue.current.indexOf(entry);
         if (idx !== -1) ackQueue.current.splice(idx, 1);
         reject(new Error('Machine stopped responding — cable disconnected or machine halted.'));
-      }, 2000);
+      }, timeoutMs);
 
       window.serial.writeLine(cmd).catch(e => {
         clearTimeout(timeoutHandle);
-        const idx = ackQueue.current.indexOf(onAck);
+        const idx = ackQueue.current.indexOf(entry);
         if (idx !== -1) ackQueue.current.splice(idx, 1);
         reject(e);
       });
@@ -549,6 +572,34 @@ export default function AutomatedDispensingPanel({
     runDispenseLoop(pad);
   };
 
+  // Starts the 3-second auto-resume countdown with a visible UI ticker and cancel button.
+  const startAutoResumeCountdown = (padToResume, label = 'Reconnected') => {
+    toast.success(`${label} — resuming from pad ${padToResume + 1} in 3 s…`);
+    setAutoResumeCountdown(3);
+    let tick = 3;
+    autoResumeCountIntervalRef.current = setInterval(() => {
+      tick--;
+      setAutoResumeCountdown(tick);
+      if (tick <= 0) {
+        clearInterval(autoResumeCountIntervalRef.current);
+        autoResumeCountIntervalRef.current = null;
+      }
+    }, 1000);
+    autoResumeTimerRef.current = setTimeout(() => {
+      autoResumeTimerRef.current = null;
+      setAutoResumeCountdown(0);
+      if (isJobRunningRef.current) return;
+      directResumeRef.current?.();
+    }, 3000);
+  };
+
+  const cancelAutoResume = () => {
+    if (autoResumeTimerRef.current) { clearTimeout(autoResumeTimerRef.current); autoResumeTimerRef.current = null; }
+    if (autoResumeCountIntervalRef.current) { clearInterval(autoResumeCountIntervalRef.current); autoResumeCountIntervalRef.current = null; }
+    setAutoResumeCountdown(0);
+    toast.info('Auto-resume cancelled.');
+  };
+
   const proceedFromPreflight = async () => {
     setBoardCheckResult(null);
     setBoardConfirmed(false);
@@ -574,7 +625,7 @@ export default function AutomatedDispensingPanel({
   // Returns true if contact detected and Z=0 was set, false if no contact (soft fail — job continues).
   const probeZSurface = async () => {
     probedSurfaceZRef.current = null;
-    await sendGcodeWait('G38.2 Z-30 F50');
+    await sendGcodeWait('G38.2 Z-30 F50', 60000); // 30 mm at 50 mm/min = 36 s max travel
     // Brief settle: some firmware sends [PRB:...] a few ms after the 'ok'
     await new Promise(r => setTimeout(r, 250));
     if (probedSurfaceZRef.current === null) {
@@ -839,7 +890,8 @@ export default function AutomatedDispensingPanel({
             });
           }
           for (const c of cmds) {
-            await sendGcodeWait(c);
+            const g4Ms = c.match(/^G4\s+P(\d+)/i)?.[1];
+            await sendGcodeWait(c, g4Ms ? parseInt(g4Ms) + 5000 : 30000);
           }
 
           nozzleMaintenance.recordDispense();
@@ -914,6 +966,20 @@ export default function AutomatedDispensingPanel({
       setCurrentPadInfo(null);
       window.dispatchEvent(new CustomEvent('machine:homed')); // machine is at known position
       toast.success('Dispensing job completed successfully!');
+
+      // Nozzle health check — fires after SPC data is persisted to localStorage
+      {
+        const health = computeNozzleHealth(nozzleMaintenance.getMaintenanceStatus(), spcLoad().jobs);
+        if (health < 50) {
+          toast.error(
+            `Nozzle health ${health}/100 — ${health < 25 ? 'poor dot quality, consider replacement' : 'clean nozzle now'}.`,
+            { sticky: true }
+          );
+        } else if (health < 75) {
+          toast.warning(`Nozzle health ${health}/100 — clean nozzle soon.`);
+        }
+      }
+
       if (onJobComplete) onJobComplete();
       setJobStage('finished');
       setMachineStatus('idle');
@@ -960,7 +1026,7 @@ export default function AutomatedDispensingPanel({
     setIsPurging(true);
     try {
       await sendGcodeWait(`M42 P4 S${Math.round(pressure)}`);
-      await sendGcodeWait(`G4 P${Math.round(durationMs)}`);
+      await sendGcodeWait(`G4 P${Math.round(durationMs)}`, durationMs + 5000);
       await sendGcodeWait('M42 P4 S0');
       await sendGcodeWait('M400');
     } finally {
@@ -970,14 +1036,13 @@ export default function AutomatedDispensingPanel({
 
   const cancelJob = async () => {
     // Cancel any pending auto-resume countdown
-    if (autoResumeTimerRef.current) {
-      clearTimeout(autoResumeTimerRef.current);
-      autoResumeTimerRef.current = null;
-    }
+    if (autoResumeTimerRef.current) { clearTimeout(autoResumeTimerRef.current); autoResumeTimerRef.current = null; }
+    if (autoResumeCountIntervalRef.current) { clearInterval(autoResumeCountIntervalRef.current); autoResumeCountIntervalRef.current = null; }
+    setAutoResumeCountdown(0);
     const padsDone = globalPointCountRef.current;
     isJobRunningRef.current = false;
     setIsJobRunning(false);
-    ackQueue.current.splice(0).forEach(fn => fn()); // Resolve pending sendGcodeWait so loop can exit
+    ackQueue.current.splice(0).forEach(e => e.ack()); // Resolve pending sendGcodeWait so loop can exit
     if (padsDone > 0) {
       localStorage.setItem('resumeFromPad', String(padsDone));
       setResumeFromPad(padsDone);
@@ -1133,6 +1198,7 @@ export default function AutomatedDispensingPanel({
   };
 
   return (
+    <>
     <div className="panel automated-panel">
       <h3 style={{ marginLeft: '10px' }}>🤖 Automated Dispensing</h3>
       <div className='panel-data'>
@@ -1497,6 +1563,7 @@ export default function AutomatedDispensingPanel({
             manager={nozzleMaintenance}
             onPurge={purgeNozzle}
             isPurging={isPurging}
+            spcJobs={spcData.jobs}
           />
         </div>
 
@@ -1735,6 +1802,7 @@ export default function AutomatedDispensingPanel({
           {jobStage === 'idle' && (
             <div className="section">
               <h3>Processing Control</h3>
+
 
               {resumeFromPad > 0 && (
                 <div style={{ marginBottom: 10, padding: '8px 12px', background: 'rgba(56,139,253,0.1)', border: '1px solid #388bfd', borderRadius: 6, fontSize: '0.83em' }}>
@@ -2036,5 +2104,51 @@ export default function AutomatedDispensingPanel({
         </div>
       </div>
     </div>
+
+    {/* ── Auto-resume portal card — fixed bottom-right, always on top ─────── */}
+    {autoResumeCountdown > 0 && createPortal(
+      <div style={{
+        position: 'fixed',
+        bottom: 24,
+        right: 24,
+        zIndex: 9999,
+        minWidth: 260,
+        background: '#0d1117',
+        border: '2px solid #388bfd',
+        borderRadius: 10,
+        padding: '16px 20px',
+        boxShadow: '0 4px 24px rgba(56,139,253,0.25)',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 12,
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span style={{ fontSize: '1em', color: '#79c0ff', fontWeight: 700 }}>↩ Auto-resuming job</span>
+        </div>
+        <div style={{ color: '#e6edf3', fontSize: '0.9em' }}>
+          Resuming from pad <strong>{resumeFromPad + 1}</strong> in{' '}
+          <strong style={{ fontSize: '1.6em', color: '#79c0ff', lineHeight: 1 }}>{autoResumeCountdown}</strong>
+        </div>
+        <button
+          onClick={cancelAutoResume}
+          style={{
+            height: 48,
+            border: '2px solid #f85149',
+            borderRadius: 6,
+            background: 'transparent',
+            color: '#f85149',
+            fontWeight: 700,
+            fontSize: '0.9em',
+            letterSpacing: '0.05em',
+            cursor: 'pointer',
+            textTransform: 'uppercase',
+          }}
+        >
+          Cancel Resume
+        </button>
+      </div>,
+      document.body
+    )}
+    </>
   );
 }

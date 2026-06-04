@@ -6,6 +6,7 @@ const { SerialPort, ReadlineParser } = require('serialport');
 
 let win;
 let serial = { port: null, parser: null };
+let intentionalClose = false; // set true before operator-initiated close so the 'close' event is not treated as a cable pull
 
 function createWindow() {
   win = new BrowserWindow({
@@ -67,6 +68,13 @@ ipcMain.handle('serial:open', async (e, { path: portPath, baudRate = 115200 }) =
       serial.parser.on('data', (line) => {
         win.webContents.send('serial:data', line.toString());
       });
+      // Forward unexpected port closes (cable pull) to the renderer immediately.
+      port.on('close', () => {
+        if (!intentionalClose) {
+          win.webContents.send('serial:port-closed');
+        }
+        intentionalClose = false;
+      });
       resolve();
     });
   });
@@ -75,6 +83,7 @@ ipcMain.handle('serial:open', async (e, { path: portPath, baudRate = 115200 }) =
 
 ipcMain.handle('serial:close', async () => {
   if (!serial.port) return true;
+  intentionalClose = true;
   await new Promise((resolve) => {
     serial.port.close(() => {
       serial.port = null;
@@ -120,6 +129,30 @@ ipcMain.handle('serial:writeMany', async (e, { lines = [], delayMs = 3 }) => {
     if (delayMs > 0) await new Promise(r => setTimeout(r, delayMs));
   }
   return true;
+});
+
+// -------- Settings IPC --------
+const SETTINGS_FILE = path.join(app.getPath('userData'), 'settings.json');
+
+ipcMain.handle('fs:saveSettings', async (e, data) => {
+  try {
+    fs.writeFileSync(SETTINGS_FILE, JSON.stringify(data, null, 2), 'utf8');
+    return { ok: true };
+  } catch (err) {
+    console.error('fs:saveSettings failed', err);
+    return { ok: false, error: err.message };
+  }
+});
+
+ipcMain.handle('fs:loadSettings', async () => {
+  try {
+    if (!fs.existsSync(SETTINGS_FILE)) return { ok: true, data: null };
+    const raw = fs.readFileSync(SETTINGS_FILE, 'utf8');
+    return { ok: true, data: JSON.parse(raw) };
+  } catch (err) {
+    console.error('fs:loadSettings failed', err);
+    return { ok: false, data: null };
+  }
 });
 
 // -------- Job Log IPC --------

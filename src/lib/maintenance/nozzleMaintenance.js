@@ -1,3 +1,17 @@
+// Combined nozzle health score (0–100).
+// wearScore (0–50): linear — 50 when fresh, 0 when dispense count hits the threshold.
+// qualityScore (0–50): average pass rate of the last 5 SPC jobs × 50.
+//   Falls to 0 when all recent dots are failing; stays at 50 with no SPC data yet.
+export function computeNozzleHealth(status, spcJobs = []) {
+  const { dispenseCount, settings: { maxDispensesBeforeCleaning } } = status;
+  const wearScore = Math.round((1 - Math.min(1, dispenseCount / maxDispensesBeforeCleaning)) * 50);
+  const recent = spcJobs.slice(-5);
+  const qualityScore = recent.length > 0
+    ? Math.round((recent.reduce((s, j) => s + j.passRate, 0) / recent.length) * 50)
+    : 50;
+  return wearScore + qualityScore;
+}
+
 // Nozzle maintenance and cleaning reminders
 export class NozzleMaintenanceManager {
   constructor() {

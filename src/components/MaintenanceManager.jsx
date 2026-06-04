@@ -1,6 +1,27 @@
 import { useState, useEffect, useRef } from 'react';
+import { computeNozzleHealth } from '../lib/maintenance/nozzleMaintenance.js';
 
-export default function MaintenanceManager({ manager, onPurge, isPurging = false }) {
+function HealthRing({ score }) {
+  const color = score >= 75 ? '#3fb950' : score >= 50 ? '#e3b341' : '#f85149';
+  const deg = Math.round((score / 100) * 360);
+  return (
+    <div style={{ position: 'relative', width: 64, height: 64, flexShrink: 0 }}>
+      <div style={{
+        width: '100%', height: '100%', borderRadius: '50%',
+        background: `conic-gradient(${color} 0deg ${deg}deg, #21262d ${deg}deg 360deg)`,
+      }} />
+      <div style={{
+        position: 'absolute', inset: 8, borderRadius: '50%',
+        background: '#0d1117',
+        display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+      }}>
+        <span style={{ color, fontWeight: 700, fontSize: '0.9em', lineHeight: 1 }}>{score}</span>
+      </div>
+    </div>
+  );
+}
+
+export default function MaintenanceManager({ manager, onPurge, isPurging = false, spcJobs = [] }) {
   const [status, setStatus] = useState(() => manager?.getMaintenanceStatus() ?? null);
   const [showAlert, setShowAlert] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
@@ -24,8 +45,12 @@ export default function MaintenanceManager({ manager, onPurge, isPurging = false
 
   if (!status) return null;
 
-  const padPct = Math.min(100, (status.dispenseCount / status.settings.maxDispensesBeforeCleaning) * 100);
-  const barColor = status.needsCleaning ? '#f85149' : status.dispensesRemaining < 20 ? '#e3b341' : '#3fb950';
+  const health = computeNozzleHealth(status, spcJobs);
+  const ringColor = health >= 75 ? '#3fb950' : health >= 50 ? '#e3b341' : '#f85149';
+  const healthLabel = health >= 75 ? 'Nozzle healthy'
+    : health >= 50 ? 'Clean nozzle soon'
+    : health >= 25 ? 'Clean nozzle now'
+    : 'Poor dot quality — consider replacement';
 
   const markCleaned = () => {
     manager.markCleaned();
@@ -72,28 +97,36 @@ export default function MaintenanceManager({ manager, onPurge, isPurging = false
       {/* Inline widget */}
       <div style={{
         marginTop: 12, padding: '10px 12px',
-        background: status.needsCleaning ? 'rgba(220,50,50,0.08)' : 'rgba(255,255,255,0.03)',
-        border: `1px solid ${status.needsCleaning ? '#f85149' : '#30363d'}`,
+        background: health < 50 ? 'rgba(220,50,50,0.08)' : health < 75 ? 'rgba(227,179,65,0.06)' : 'rgba(255,255,255,0.03)',
+        border: `1px solid ${health < 50 ? '#f85149' : health < 75 ? '#e3b341' : '#30363d'}`,
         borderRadius: 8,
       }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-          <span style={{ fontWeight: 600, fontSize: '0.85em', color: status.needsCleaning ? '#f85149' : '#e6edf3' }}>
-            {status.needsCleaning ? '⚠ Nozzle Cleaning Required' : '🔧 Nozzle Maintenance'}
-          </span>
-          <div style={{ display: 'flex', gap: 4 }}>
-            <button
-              className="btn secondary"
-              style={{ fontSize: '0.75em', padding: '2px 8px', height: 'auto' }}
-              onClick={() => setShowSettings(s => !s)}
-              title="Configure thresholds"
-            >⚙</button>
-            <button
-              className="btn secondary"
-              style={{ fontSize: '0.75em', padding: '2px 10px', height: 'auto' }}
-              onClick={markCleaned}
-            >
-              ✓ Mark Cleaned
-            </button>
+        {/* Header: ring + title/score/buttons */}
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 8 }}>
+          <HealthRing score={health} />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 4 }}>
+              <span style={{ fontWeight: 600, fontSize: '0.85em', color: '#e6edf3' }}>🔧 Nozzle Maintenance</span>
+              <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+                <button
+                  className="btn secondary"
+                  style={{ fontSize: '0.75em', padding: '2px 8px', height: 'auto' }}
+                  onClick={() => setShowSettings(s => !s)}
+                  title="Configure thresholds"
+                >⚙</button>
+                <button
+                  className="btn secondary"
+                  style={{ fontSize: '0.75em', padding: '2px 10px', height: 'auto' }}
+                  onClick={markCleaned}
+                >✓ Mark Cleaned</button>
+              </div>
+            </div>
+            <div style={{ marginTop: 3, fontSize: '0.8em', color: ringColor, fontWeight: 600 }}>
+              {healthLabel}
+            </div>
+            <div style={{ marginTop: 2, fontSize: '0.72em', color: '#8b949e' }}>
+              Score: {health}/100{spcJobs.length > 0 ? ` · last ${Math.min(5, spcJobs.length)} job${spcJobs.length === 1 ? '' : 's'}` : ' · no SPC data yet'}
+            </div>
           </div>
         </div>
 
@@ -145,10 +178,6 @@ export default function MaintenanceManager({ manager, onPurge, isPurging = false
           {!status.needsCleaning && (
             <span style={{ color: '#3fb950' }}>{status.dispensesRemaining} pads remaining</span>
           )}
-        </div>
-
-        <div style={{ height: 4, background: '#21262d', borderRadius: 2, overflow: 'hidden', marginBottom: 8 }}>
-          <div style={{ height: '100%', width: `${padPct}%`, background: barColor, borderRadius: 2, transition: 'width 0.3s ease' }} />
         </div>
 
         {status.needsCleaning && (

@@ -28,6 +28,7 @@ export default function SerialPanel({
   const reconnectTargetRef = useRef('');  // port path to watch for
   const baudRef = useRef(baud);           // current baud, safe inside interval closure
   const pathRef = useRef(path);           // current path, safe inside event handler closure
+  const statusQueryIntervalRef = useRef(null); // M114 polling interval
 
   // Prop refs — stable handles for closures registered once
   const onConnectRef = useRef(onConnect);
@@ -60,7 +61,7 @@ export default function SerialPanel({
   // ── Incoming serial data handler ─────────────────────────────────────────────
 
   useEffect(() => {
-    window.serial.onData((line) => {
+    const removeDataListener = window.serial.onData((line) => {
       const ts = new Date().toISOString();
       const isStatusPos = line.match(/X\s*:\s*([-\d.]+)/i) || line.match(/MPos:([-\d.]+)/);
       if (!isStatusPos) {
@@ -94,6 +95,7 @@ export default function SerialPanel({
         ));
       }
     });
+    return removeDataListener;
   }, []);
 
   // ── Auto-reconnect helpers ───────────────────────────────────────────────────
@@ -128,8 +130,8 @@ export default function SerialPanel({
     }, 2000);
   };
 
-  // Cleanup poller on unmount
-  useEffect(() => () => stopAutoReconnect(), []);
+  // Cleanup all intervals and listeners on unmount
+  useEffect(() => () => { stopAutoReconnect(); stopStatusQuery(); }, []);
 
   // ── Connection logic ─────────────────────────────────────────────────────────
 
@@ -151,8 +153,10 @@ export default function SerialPanel({
       startStatusQuery();
 
       if (isReconnect) {
-        // Reconnect path — skip homing, resume directly
+        // Reconnect path — skip homing, resume directly.
+        // A USB cable pull doesn't reset the machine firmware, so it's still physically homed.
         window.dispatchEvent(new CustomEvent('serial:connected'));
+        window.dispatchEvent(new CustomEvent('machine:homed'));
       } else {
         // First connect — home so position is known
         setTimeout(async () => {
@@ -190,6 +194,7 @@ export default function SerialPanel({
   const disconnect = async () => {
     isIntentionalDisconnectRef.current = true;
     stopAutoReconnect();
+    stopStatusQuery();
     try { await window.serial.close(); } catch { }
     setIsHoming(false);
     if (onDisconnectRef.current) onDisconnectRef.current();
@@ -201,7 +206,7 @@ export default function SerialPanel({
     const onConnectionLost = async () => {
       if (isIntentionalDisconnectRef.current) return;
       const targetPath = pathRef.current;
-      // Close port on Electron side so it can be re-opened cleanly
+      stopStatusQuery();
       try { await window.serial.close(); } catch { }
       if (onDisconnectRef.current) onDisconnectRef.current();
       startAutoReconnect(targetPath);
@@ -211,11 +216,33 @@ export default function SerialPanel({
     return () => window.removeEventListener('serial:connection-lost', onConnectionLost);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // ── IPC port-closed event — OS fires this within ~1 s of a USB cable pull ───
+  // This is the primary fast-path for cable-pull detection during an active job
+  // (M114 polling is paused while the job runs, so the window event alone is too slow).
+
+  useEffect(() => {
+    if (!window.serial?.onPortClosed) return;
+    const cleanup = window.serial.onPortClosed(() => {
+      if (!isIntentionalDisconnectRef.current) {
+        window.dispatchEvent(new CustomEvent('serial:connection-lost'));
+      }
+    });
+    return cleanup;
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   // ── M114 status polling ──────────────────────────────────────────────────────
 
+  const stopStatusQuery = () => {
+    if (statusQueryIntervalRef.current) {
+      clearInterval(statusQueryIntervalRef.current);
+      statusQueryIntervalRef.current = null;
+    }
+  };
+
   const startStatusQuery = () => {
+    stopStatusQuery(); // clear any previous interval before creating a new one
     let consecutiveFailures = 0;
-    setInterval(async () => {
+    statusQueryIntervalRef.current = setInterval(async () => {
       if (window.pauseSerialPolling) return; // job is running — cable-pull detected by sendGcodeWait
       try {
         await window.serial.writeLine('M114');
@@ -329,8 +356,10 @@ export default function SerialPanel({
           }
         </select>
 
-        <button className="btn" onClick={connect} disabled={!path || isConnected || isReconnecting}>Connect</button>
-        <button className="btn secondary" onClick={disconnect} disabled={!isConnected && !isReconnecting}>Disconnect</button>
+        {isConnected
+          ? <button className="btn secondary" onClick={disconnect}>Disconnect</button>
+          : <button className="btn" onClick={connect} disabled={!path}>Connect</button>
+        }
 
         <label className="btn">
           Send file

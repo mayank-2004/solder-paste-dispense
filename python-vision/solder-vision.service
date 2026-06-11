@@ -1,0 +1,24 @@
+[Unit]
+Description=Solder Paste Dispenser — Python Vision Server
+After=network.target
+# Ensures the service waits for a valid network before starting,
+# so the Electron app can reach it over the LAN immediately.
+
+[Service]
+Type=simple
+User=pi
+# ── EDIT THIS PATH to match where you cloned/copied the python-vision folder ──
+WorkingDirectory=/home/pi/solder-vision/python-vision
+ExecStart=/home/pi/solder-vision/python-vision/venv/bin/python server.py
+
+Restart=always
+RestartSec=5
+# Give the camera USB driver 10 s to settle after a Pi reboot before first start
+ExecStartPre=/bin/sleep 10
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=solder-vision
+
+[Install]
+WantedBy=multi-user.target

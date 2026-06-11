@@ -48,3 +48,66 @@ The Python server already owns the camera via OpenCV. We can expose CAP_PROP_EXP
 
 Option B — Stub the UI now, wire hardware later
 Add the M42 brightness slider to the settings UI but disable it with a "No ring light connected" note. When you add the hardware, just enable it.
+
+
+
+
+
+Hardware side — what's remaining on the Pi itself
+That's outside the app's scope, but the Pi would need:
+
+Camera connected (USB or CSI ribbon)
+Python server code deployed and set to auto-start on boot (systemd service)
+On the same local network as the Windows PC running the Electron app
+The serial port (machine control) stays on the Windows PC — the Pi only handles vision
+
+
+
+
+
+
+
+
+The operator types the Raspberry Pi's local network IP address in this format:
+http://192.168.1.42:8000
+The IP (192.168.1.42) is whatever the Pi's address is on your network. To find it, run this on the Raspberry Pi terminal:
+
+
+hostname -I
+It will print something like 192.168.1.42 — that's the IP to use.
+
+So the full URL becomes: http://192.168.1.42:8000
+
+The port 8000 stays the same — that's the port the Python Vision Server listens on. The operator just replaces the IP part with whatever hostname -I returns on their Pi.
+
+Quick checklist before it works:
+
+Pi and the Windows PC are on the same Wi-Fi/LAN
+Python Vision Server is running on the Pi (python server.py or whatever the start command is)
+The Pi's firewall allows port 8000 (sudo ufw allow 8000 if ufw is active)
+
+
+
+
+
+
+
+
+Hardware — Remaining
+1. Camera
+A camera must be physically connected to the Pi — either:
+
+USB webcam (simplest, plug and play)
+CSI ribbon camera (Pi Camera Module — needs libcamera which may conflict with OpenCV's V4L2 approach)
+Recommendation: USB webcam — works out of the box with the current server code
+2. Power supply
+Pi 4 needs a proper 5V/3A USB-C supply. Underpowered Pi causes random crashes mid-job.
+
+3. Network
+Pi and Windows PC must be on the same network. Options:
+
+Ethernet cable to the same router (most reliable — no WiFi drops during a job)
+WiFi (works but a dropped packet during fiducial servo loop adds latency)
+Recommendation: Ethernet for a production machine
+4. Mounting
+The Pi needs to be physically mounted on or near the dispenser so the camera cable reaches the PCB area.

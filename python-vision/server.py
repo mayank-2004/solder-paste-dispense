@@ -22,7 +22,7 @@ from pydantic import BaseModel
 # ──────────────────────────────────────────────
 # Configuration
 # ──────────────────────────────────────────────
-CAMERA_INDEX = 1          # Change to 0 if the dispensing camera is the only webcam
+CAMERA_INDEX = 1          # Change to 0 if the dispensing camera is the only webcam/pi
 FRAME_WIDTH  = 1280
 FRAME_HEIGHT = 720
 MJPEG_QUALITY = 85        # JPEG quality 0-100 (higher = better quality, more bandwidth)
@@ -90,11 +90,34 @@ def _load_calibration():
 _load_calibration()
 
 # ──────────────────────────────────────────────
+# Camera configuration (index + resolution, persisted to disk)
+# ──────────────────────────────────────────────
+CAMERA_CONFIG_FILE = os.path.join(os.path.dirname(__file__), "camera_config.json")
+
+def _load_camera_config():
+    """Restore camera index and resolution from camera_config.json (if it exists)."""
+    global CAMERA_INDEX, FRAME_WIDTH, FRAME_HEIGHT
+    if not os.path.exists(CAMERA_CONFIG_FILE):
+        return
+    try:
+        with open(CAMERA_CONFIG_FILE, "r") as f:
+            cfg = json.load(f)
+        CAMERA_INDEX = int(cfg.get("index",  CAMERA_INDEX))
+        FRAME_WIDTH  = int(cfg.get("width",  FRAME_WIDTH))
+        FRAME_HEIGHT = int(cfg.get("height", FRAME_HEIGHT))
+        print(f"[Camera] Config loaded: index={CAMERA_INDEX} {FRAME_WIDTH}x{FRAME_HEIGHT}")
+    except Exception as e:
+        print(f"[Camera] Config load failed: {e}")
+
+_load_camera_config()
+
+# ──────────────────────────────────────────────
 # Camera capture (runs in a dedicated background thread)
 # ──────────────────────────────────────────────
 latest_frame = None
 frame_lock = threading.Lock()
-camera_thread_running = True
+camera_stop_event = threading.Event()   # set() to stop the thread; clear() before restarting
+camera_thread_ref = None                # reference to the current camera thread
 camera_cap = None          # Global reference so API endpoints can adjust camera properties
 
 def camera_loop():
@@ -104,7 +127,13 @@ def camera_loop():
     vision analysis thread.
     """
     global latest_frame, camera_cap
-    cap = cv2.VideoCapture(CAMERA_INDEX, cv2.CAP_DSHOW)  # CAP_DSHOW for Windows USB cameras
+    # CAP_DSHOW = Windows DirectShow; CAP_V4L2 = Linux (Raspberry Pi). Fall back to
+    # no backend flag if neither is available so the server still starts on other platforms.
+    import platform
+    if platform.system() == "Windows":
+        cap = cv2.VideoCapture(CAMERA_INDEX, cv2.CAP_DSHOW)
+    else:
+        cap = cv2.VideoCapture(CAMERA_INDEX, cv2.CAP_V4L2)
     cap.set(cv2.CAP_PROP_FRAME_WIDTH,  FRAME_WIDTH)
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, FRAME_HEIGHT)
     cap.set(cv2.CAP_PROP_FPS, 30)
@@ -119,7 +148,7 @@ def camera_loop():
     camera_cap = cap  # Expose to API endpoints for live property changes
     print(f"[Vision] Camera opened on index {CAMERA_INDEX} ({FRAME_WIDTH}x{FRAME_HEIGHT})")
 
-    while camera_thread_running:
+    while not camera_stop_event.is_set():
         ret, frame = cap.read()
         if ret:
             with frame_lock:
@@ -156,7 +185,7 @@ def vision_loop():
     """
     sticky_best_circle = None
 
-    while camera_thread_running:
+    while not camera_stop_event.is_set():
         frame = get_frame()
         if frame is None:
             time.sleep(DETECTION_INTERVAL)
@@ -464,22 +493,41 @@ def generate_mjpeg():
 
 
 # ──────────────────────────────────────────────
+# Camera thread restart (called after config change)
+# ──────────────────────────────────────────────
+def restart_camera_thread():
+    """Stop the current camera thread and launch a fresh one using the updated CAMERA_INDEX / resolution."""
+    global camera_thread_ref
+    camera_stop_event.set()
+    if camera_thread_ref and camera_thread_ref.is_alive():
+        camera_thread_ref.join(timeout=3.0)
+    with frame_lock:
+        pass  # drain any pending frame (not strictly needed, but keeps the lock clean)
+    camera_stop_event.clear()
+    t = threading.Thread(target=camera_loop, daemon=True)
+    t.start()
+    camera_thread_ref = t
+    print("[Camera] Camera thread restarted.")
+
+
+# ──────────────────────────────────────────────
 # FastAPI App
 # ──────────────────────────────────────────────
 from contextlib import asynccontextmanager
 
 @asynccontextmanager
 async def lifespan(app):
+    global camera_thread_ref
     # Launch camera and vision background threads on startup
     cam_thread    = threading.Thread(target=camera_loop,  daemon=True)
     vision_thread = threading.Thread(target=vision_loop,  daemon=True)
+    camera_thread_ref = cam_thread
     cam_thread.start()
     vision_thread.start()
-    print("[Vision] Server ready — stream at http://localhost:8000/video_feed")
+    print("[Vision] Server ready — stream at http://0.0.0.0:8000/video_feed")
     yield
     # Shutdown: signal threads to stop
-    global camera_thread_running
-    camera_thread_running = False
+    camera_stop_event.set()
 
 app = FastAPI(title="Glue Dispenser Vision Server", lifespan=lifespan)
 
@@ -770,6 +818,38 @@ def api_set_px_per_mm(value: float):
     PX_PER_MM = value
     print(f"[Vision] px/mm updated to {PX_PER_MM}")
     return {"px_per_mm": PX_PER_MM}
+
+
+# ──────────────────────────────────────────────
+# Camera index + resolution config endpoints
+# ──────────────────────────────────────────────
+
+class CameraConfigModel(BaseModel):
+    index:  int = None   # 0–9 (camera device index)
+    width:  int = None   # e.g. 640, 1280, 1920
+    height: int = None   # e.g. 480, 720, 1080
+
+@app.get("/api/camera/config")
+def api_get_camera_config():
+    """Return current camera index and resolution."""
+    return JSONResponse({
+        "index":  CAMERA_INDEX,
+        "width":  FRAME_WIDTH,
+        "height": FRAME_HEIGHT,
+    })
+
+@app.post("/api/camera/config")
+def api_set_camera_config(cfg: CameraConfigModel):
+    """Update camera index and/or resolution, persist to camera_config.json, restart camera."""
+    global CAMERA_INDEX, FRAME_WIDTH, FRAME_HEIGHT
+    if cfg.index  is not None: CAMERA_INDEX = max(0, min(9, cfg.index))
+    if cfg.width  is not None: FRAME_WIDTH  = cfg.width
+    if cfg.height is not None: FRAME_HEIGHT = cfg.height
+    with open(CAMERA_CONFIG_FILE, "w") as f:
+        json.dump({"index": CAMERA_INDEX, "width": FRAME_WIDTH, "height": FRAME_HEIGHT}, f)
+    print(f"[Camera] Config updated: index={CAMERA_INDEX} {FRAME_WIDTH}x{FRAME_HEIGHT}")
+    restart_camera_thread()
+    return JSONResponse({"ok": True, "index": CAMERA_INDEX, "width": FRAME_WIDTH, "height": FRAME_HEIGHT})
 
 
 # ──────────────────────────────────────────────

@@ -13,8 +13,8 @@
 
 /* ── Top Header Bar ─────────────────────────────────────── */
 .app-header {
-  height: 48px;
-  min-height: 48px;
+  height: 52px;
+  min-height: 52px;
   background: var(--bg-header);
   border-bottom: 1px solid var(--border-primary);
   display: flex;
@@ -53,7 +53,7 @@
   font-size: 14px;
 }
 .app-logo-text {
-  font-size: 0.78rem;
+  font-size: 0.9rem;
   font-weight: 800;
   text-transform: uppercase;
   letter-spacing: 0.14em;
@@ -61,7 +61,7 @@
   line-height: 1.1;
 }
 .app-logo-sub {
-  font-size: 0.58rem;
+  font-size: 0.7rem;
   color: var(--text-muted);
   letter-spacing: 0.08em;
   text-transform: uppercase;

@@ -492,6 +492,20 @@ export default function AutomatedDispensingPanel({
         passed: nozzleDia > 0,
         detail: nozzleDia > 0 ? `${nozzleDia} mm` : 'Nozzle diameter is 0 — volume estimates will be wrong',
       },
+      (() => {
+        const health = computeNozzleHealth(nozzleMaintenance.getMaintenanceStatus(), spcData.jobs);
+        const label = health >= 75 ? 'Nozzle healthy'
+          : health >= 50 ? 'Clean nozzle soon'
+          : health >= 25 ? 'Clean nozzle now'
+          : 'Poor dot quality — consider replacement';
+        return {
+          id: 'nozzleHealth',
+          label: 'Nozzle health',
+          critical: false,
+          passed: health >= 75,
+          detail: `Score ${health}/100 — ${label}`,
+        };
+      })(),
       {
         id: 'stock',
         label: 'Paste stock sufficient',

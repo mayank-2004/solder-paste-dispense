@@ -725,7 +725,6 @@ export default function App() {
       const hasChanged = !prev || prev.id !== activeRef.id || Math.abs(prev.x - activeRef.x) > 0.001 || Math.abs(prev.y - activeRef.y) > 0.001;
 
       if (hasChanged) {
-        console.log('Drawing activeRef:', activeRef, 'coordinates:', { x: activeRef.x, y: activeRef.y });
         prevActiveRefLogRef.current = { ...activeRef };
       }
       const uh = mmToCurrentUnits({ x: activeRef.x, y: activeRef.y });
@@ -1414,7 +1413,7 @@ export default function App() {
       const hasChanged = !prev || Math.abs(prev.x - selectedOrigin.x) > 0.001 || Math.abs(prev.y - selectedOrigin.y) > 0.001;
 
       if (hasChanged) {
-        console.log('Origin changed, updating overlay:', selectedOrigin);
+        // console.log('Origin changed, updating overlay:', selectedOrigin);
         prevOriginLogRef.current = { ...selectedOrigin };
         setTimeout(() => updateOverlay(), 300);
       }
@@ -1567,6 +1566,7 @@ export default function App() {
     if (P.length < 2) return;
     const T = fitSimilarity(P.map(f => f.design), P.map(f => f.machine));
     setXf(T);
+    setApplyXf(true);
   };
   const onSolve3 = () => {
     const P = fiducials.filter(f => f.design && f.machine);
@@ -1575,6 +1575,7 @@ export default function App() {
       ? fitHomography(P.map(f => f.design), P.map(f => f.machine))
       : fitAffine(P.map(f => f.design), P.map(f => f.machine));
     setXf(T);
+    setApplyXf(true);
   };
 
   const onSolvePanelXf = () => {
@@ -1586,6 +1587,7 @@ export default function App() {
         ? fitAffine(P.map(f => f.design), P.map(f => f.machine))
         : fitSimilarity(P.map(f => f.design), P.map(f => f.machine));
     setPanelXf(T);
+    setApplyXf(true);
   };
 
   // ── Auto-solve board transform once ALL detected fiducials have machine coords ──
@@ -2042,11 +2044,14 @@ export default function App() {
                     if (selectedPadIndices.length < 2) return;
                     const refPoint = referencePoint || effectiveOrigin || { x: 0, y: 0 };
                     const currentPads = selectedPadIndices.map(i => pads[i]);
+                    // enableMultiDot: false — reorder the same N pads, don't expand into sub-dots
                     const sortedPads = dispensingSequencer.calculateOptimalSequence(refPoint, currentPads, {
                       nozzleDia: parseFloat(nozzleDia) || 0.8,
-                      enableMultiDot: true
+                      enableMultiDot: false
                     });
-                    const sortedIndices = sortedPads.map(p => pads.findIndex(orig => orig === p || (orig.x === p.x && orig.y === p.y)));
+                    const sortedIndices = sortedPads
+                      .map(p => pads.findIndex(orig => orig === p || (orig.x === p.x && orig.y === p.y)))
+                      .filter(i => i !== -1);
                     setSelectedPadIndices(sortedIndices);
                   }}
                   onClearPath={() => {

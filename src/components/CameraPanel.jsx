@@ -157,18 +157,31 @@ export default function CameraPanel({
   // Controlled via POST /api/camera/settings on the Python vision server.
   // No additional hardware required — adjusts how the USB camera captures frames.
   const [camAutoExposure, setCamAutoExposure] = useState(true);
-  const [camExposure,     setCamExposure]     = useState(-6);   // DirectShow log scale -13..−1
-  const [camGain,         setCamGain]         = useState(0);    // 0–255
-  const [camBrightness,   setCamBrightness]   = useState(128);  // 0–255
+  const [camExposure, setCamExposure] = useState(-6);   // DirectShow log scale -13..−1
+  const [camGain, setCamGain] = useState(0);    // 0–255
+  const [camBrightness, setCamBrightness] = useState(128);  // 0–255
 
   const applyCameraSettings = async (patch) => {
     try {
-      await fetch(`${PYTHON_URL}/api/camera/settings`, {
+      await fetch(`${pythonUrlRef.current}/api/camera/settings`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(patch),
       });
     } catch { /* vision server offline — ignore silently */ }
+  };
+
+  const applyCameraConfig = async (patch) => {
+    const next = { ...camConfig, ...patch };
+    setCamConfig(next);
+    try {
+      if (streamOn) stopCam();
+      await fetch(`${pythonUrlRef.current}/api/camera/config`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(patch),
+      });
+    } catch { toast.error('Vision server offline — config not saved'); }
   };
 
   // ─── Python Vision Mode ────────────────────────────────────────────
@@ -178,26 +191,47 @@ export default function CameraPanel({
   const [pythonServerOk, setPythonServerOk] = useState(false);
   const [pythonVisionData, setPythonVisionData] = useState(null);
   const pythonPollRef = useRef(null);  // setInterval handle for vision data polling
-  const PYTHON_URL = 'http://localhost:8000';
+  const [pythonUrl, setPythonUrl] = useState(
+    () => localStorage.getItem('pythonVisionUrl') || 'http://localhost:8000'
+  );
+  const pythonUrlRef = useRef(pythonUrl);
+  const [camConfig, setCamConfig] = useState({ index: 0, width: 1280, height: 720 });
 
-  // Persist mode preference
+  // Persist mode and URL preferences
   useEffect(() => { localStorage.setItem('pythonVisionMode', JSON.stringify(pythonMode)); }, [pythonMode]);
+  useEffect(() => {
+    pythonUrlRef.current = pythonUrl;
+    localStorage.setItem('pythonVisionUrl', pythonUrl);
+  }, [pythonUrl]);
 
   // Sync pixelsPerMm to Python server whenever it changes
   useEffect(() => {
     if (pythonMode && pythonServerOk && pixelsPerMm) {
-      fetch(`${PYTHON_URL}/api/set_px_per_mm/${pixelsPerMm}`, { method: 'POST' }).catch(() => { });
+      fetch(`${pythonUrlRef.current}/api/set_px_per_mm/${pixelsPerMm}`, { method: 'POST' }).catch(() => { });
     }
   }, [pixelsPerMm, pythonMode, pythonServerOk]);
 
   // Ping the Python server every 3s to show live status in UI
+  const prevServerOkRef = useRef(false);
   useEffect(() => {
     const check = async () => {
       try {
-        const r = await fetch(`${PYTHON_URL}/api/status`, { signal: AbortSignal.timeout(1500) });
+        const r = await fetch(`${pythonUrlRef.current}/api/status`, { signal: AbortSignal.timeout(1500) });
         const d = await r.json();
-        setPythonServerOk(d.ok === true);
-      } catch { setPythonServerOk(false); }
+        const ok = d.ok === true;
+        setPythonServerOk(ok);
+        // Fetch camera config once when server first comes online
+        if (ok && !prevServerOkRef.current) {
+          try {
+            const cr = await fetch(`${pythonUrlRef.current}/api/camera/config`);
+            if (cr.ok) setCamConfig(await cr.json());
+          } catch { /* ignore */ }
+        }
+        prevServerOkRef.current = ok;
+      } catch {
+        setPythonServerOk(false);
+        prevServerOkRef.current = false;
+      }
     };
     check();
     const id = setInterval(check, 3000);
@@ -261,7 +295,7 @@ export default function CameraPanel({
     if (pythonPollRef.current) {
       clearInterval(pythonPollRef.current);
       pythonPollRef.current = null;
-      fetch(`${PYTHON_URL}/api/stop_detect`, { method: 'POST' }).catch(() => {});
+      fetch(`${pythonUrlRef.current}/api/stop_detect`, { method: 'POST' }).catch(() => { });
     }
   }, [isJobRunning]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -452,7 +486,7 @@ export default function CameraPanel({
     if (pythonMode) {
       // Stop Python detection polling if running
       if (pythonPollRef.current) { clearInterval(pythonPollRef.current); pythonPollRef.current = null; }
-      fetch(`${PYTHON_URL}/api/stop_detect`).catch(() => { });
+      fetch(`${pythonUrlRef.current}/api/stop_detect`).catch(() => { });
       setStreamOn(false);
       return;
     }
@@ -633,7 +667,6 @@ export default function CameraPanel({
     const pixelDy = centerY - targetV;
 
     // jogMultiplier scales up the physical movement WITHOUT touching the calibrated px/mm value.
-    // e.g. at 10× — clicking 2px off-center moves 2/106.6×10 = 0.19mm instead of 0.019mm.
     const dx = (pixelDx / pxmm) * jogMultiplier;
     const dy = (pixelDy / pxmm) * jogMultiplier;
 
@@ -696,7 +729,6 @@ export default function CameraPanel({
     setPendingPick(fidId);
   }
   function clearPairs() {
-    // Legacy support cleanup
     setPairs([]);
     setH(null);
     setLastClickPx(null);
@@ -759,8 +791,6 @@ export default function CameraPanel({
 
     const pixelDx = pxX - centerX;
     const pixelDy = centerY - pxY; // Machine Y is up, Canvas Y is down
-    // const dxMm = (invertCameraX ? -1 : 1) * (pixelDx / pxmm);
-    // const dyMm = (invertCameraY ? -1 : 1) * (pixelDy / pxmm);
     const dxMm = pixelDx / pxmm;
     const dyMm = pixelDy / pxmm;
 
@@ -781,8 +811,7 @@ export default function CameraPanel({
 
       try {
         if (pythonMode) {
-          // --- Python Vision Mode ---
-          const r = await fetch(`${PYTHON_URL}/api/vision_data`);
+          const r = await fetch(`${pythonUrlRef.current}/api/vision_data`);
           const data = await r.json();
           if (data && data.best_circle) {
             const dx = data.offset_dx;
@@ -901,10 +930,35 @@ export default function CameraPanel({
     const fid = allFids.find(f => f.id === fidActiveId);
     if (!fid || !fid.design) { setAutoSearchStatus(''); return; }
 
-    // Rail fiducials use panelXf; board fiducials use xf
-    const transform = isRail ? cProps.panelXf : cProps.xf;
-    const machPos = predictFidMachinePos(fid, cProps.fiducials, transform, cProps.effectiveOrigin);
+    // Rail fiducials use panelXf; board fiducials use xf.
+    // For solved-reference lookup (when transform is null), pass the correct list:
+    // rail fiducials for rail targets so R1 can serve as translation reference for R2;
+    // board fiducials for board targets so F1 can serve as translation reference for F2.
+    // const transform = isRail ? cProps.panelXf : cProps.xf;
+    // const solveRef  = isRail ? (cProps.panelRailFiducials || []) : (cProps.fiducials || []);
+    // let machPos = predictFidMachinePos(fid, solveRef, transform, cProps.effectiveOrigin);
+
+    // Board fiducial secondary fallback: when xf is not yet solved (F1 just captured, F2 next)
+    // but panelXf IS solved (rail fiducials done first), use the panel transform to estimate
+    // the board fiducial's machine position — boards share the panel's design coordinate space.
+    // if (!machPos && !isRail && cProps.panelXf && fid.design) {
+    //   machPos = applyTransform(cProps.panelXf, fid.design);
+    // }
+    // if (!machPos) { setAutoSearchStatus('No transform — jog manually'); return; }
+
+
+    // Rail fiducials: use panelXf; board fiducials: use board xf, falling back to
+    // panelXf when the board transform isn't solved yet (panelXf can map any design
+    // coord to machine space once the rail is aligned).
+    // Pass the matching fiducial list so predictFidMachinePos can derive translation
+    // from already-solved points of the same group (R1→R2, F1→F2).
+    const transform = isRail
+      ? cProps.panelXf
+      : (cProps.xf || cProps.panelXf);
+    const refFids = isRail ? (cProps.panelRailFiducials || []) : cProps.fiducials;
+    const machPos = predictFidMachinePos(fid, refFids, transform, cProps.effectiveOrigin);
     if (!machPos) { setAutoSearchStatus('No transform — jog manually'); return; }
+
 
     // Camera target = machine position minus camera-to-nozzle offset
     const camOff = cProps.cameraOffset || { dx: 0, dy: 0 };
@@ -925,20 +979,20 @@ export default function CameraPanel({
     settleUntilRef.current = Date.now() + 2200; // ~2 s for machine to arrive and settle
 
     const cmds = moveAbs({ x: camX, y: camY, feed: 3000 });
-    window.serial.writeLine('G90').catch(() => {});
-    cmds.forEach(c => window.serial.writeLine(c).catch(() => {}));
+    window.serial.writeLine('G90').catch(() => { });
+    cmds.forEach(c => window.serial.writeLine(c).catch(() => { }));
 
     setAutoSearchStatus(`Moving to ${fidActiveId}…`);
     setTimeout(() => setAutoSearchStatus(''), 2500);
     console.log(`[AutoSearch] ${fidActiveId} → camera (${camX.toFixed(3)}, ${camY.toFixed(3)})`);
-  }, [fidActiveId, detectionInterval]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [fidActiveId, detectionInterval, panelXf]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // --- OVERWRITE HELPER: update a specific slot by ID without advancing the arm dropdown ---
   const overwriteFiducialById = (id, coord) => {
     const cProps = latestPropsRef.current;
     // Rail slots first
     const railFids = cProps.panelRailFiducials || [];
-    const railIdx  = railFids.findIndex(f => f.id === id);
+    const railIdx = railFids.findIndex(f => f.id === id);
     if (railIdx >= 0 && cProps.setPanelRailFiducials) {
       cProps.setPanelRailFiducials(railFids.map((f, i) =>
         i === railIdx ? { ...f, machine: coord, autoDetected: true } : f
@@ -947,9 +1001,9 @@ export default function CameraPanel({
       return;
     }
     // panelBoards local fiducials
-    const pBoards    = cProps.panelBoards;
+    const pBoards = cProps.panelBoards;
     const setPBoards = cProps.setPanelBoards;
-    const boardName  = cProps.activeBoardName;
+    const boardName = cProps.activeBoardName;
     if (pBoards && setPBoards) {
       const bIdx = Math.max(0, pBoards.findIndex(b => b.name === boardName));
       if (pBoards[bIdx]) {
@@ -1095,9 +1149,9 @@ export default function CameraPanel({
       const nearbyIdx = nextFids.findIndex(f =>
         f.machine && Math.hypot(f.machine.x - estimatedWorld.x, f.machine.y - estimatedWorld.y) < OVERWRITE_RADIUS_MM
       );
-      const emptyIdx  = nextFids.findIndex(f => !f.machine);
+      const emptyIdx = nextFids.findIndex(f => !f.machine);
       const snapCount = nextFids.filter(f => f.machine && f.autoDetected).length;
-      const pushIdx   = nearbyIdx >= 0 ? nearbyIdx : (emptyIdx !== -1 ? emptyIdx : nextFids.length);
+      const pushIdx = nearbyIdx >= 0 ? nearbyIdx : (emptyIdx !== -1 ? emptyIdx : nextFids.length);
       const effectiveSnapCount = nearbyIdx >= 0
         ? nextFids.slice(0, nearbyIdx).filter(f => f.machine && f.autoDetected).length
         : snapCount;
@@ -1137,11 +1191,11 @@ export default function CameraPanel({
   // ── Servo state ─────────────────────────────────────────────────────────
   // phase: 'idle' → jogging toward fiducial; 'fine' → sub-pixel snap; 'converged' → done.
   // lockedAt: machine position when converged, used to detect when user moves to new fiducial.
-  const servoStateRef   = useRef({ phase: 'idle', lockedAt: null });
-  const settleUntilRef  = useRef(0);     // suppress detection until this timestamp (ms)
-  const SERVO_FEED      = 800;           // mm/min jog speed
+  const servoStateRef = useRef({ phase: 'idle', lockedAt: null });
+  const settleUntilRef = useRef(0);     // suppress detection until this timestamp (ms)
+  const SERVO_FEED = 800;           // mm/min jog speed
   const SERVO_SETTLE_MS = 800;           // ms to wait after each jog before re-checking
-  const CONVERGE_MM     = 0.05;          // crosshair within 0.05mm → declare converged & save
+  const CONVERGE_MM = 0.05;          // crosshair within 0.05mm → declare converged & save
   const TRULY_CENTRED_MM = 0.008;        // sub-pixel threshold — safe to skip jog requirement
   const CONVERGE_STABLE_FRAMES = 3;      // fine-phase polls needed before saving (prevents Hough false-centre saves)
   const convergenceCountRef = useRef(0); // consecutive fine-phase frames within CONVERGE_MM
@@ -1177,17 +1231,17 @@ export default function CameraPanel({
       if (!streamOn) { toast.warning('Start the camera first!'); return; }
       if (detectionInterval) {
         clearInterval(pythonPollRef.current); pythonPollRef.current = null;
-        fetch(`${PYTHON_URL}/api/stop_detect`, { method: 'POST' }).catch(() => {});
+        fetch(`${pythonUrlRef.current}/api/stop_detect`, { method: 'POST' }).catch(() => { });
         setDetectionInterval(null);
         servoStateRef.current = { phase: 'idle', lockedAt: null };
         return;
       }
-      fetch(`${PYTHON_URL}/api/set_px_per_mm/${pixelsPerMm || 98.5}`, { method: 'POST' }).catch(() => {});
-      fetch(`${PYTHON_URL}/api/start_detect`, { method: 'POST' }).catch(() => {});
+      fetch(`${pythonUrlRef.current}/api/set_px_per_mm/${pixelsPerMm || 98.5}`, { method: 'POST' }).catch(() => { });
+      fetch(`${pythonUrlRef.current}/api/start_detect`, { method: 'POST' }).catch(() => { });
 
       const pollId = setInterval(async () => {
         try {
-          const r    = await fetch(`${PYTHON_URL}/api/vision_data`);
+          const r = await fetch(`${pythonUrlRef.current}/api/vision_data`);
           const data = await r.json();
           setPythonVisionData(data);
 
@@ -1214,11 +1268,11 @@ export default function CameraPanel({
           if (servoPhase === 'fine') {
             // Phase 2: sub-pixel centroid via fresh frame ROI — ±1px accuracy
             try {
-              const sr   = await fetch(`${PYTHON_URL}/api/snap_offset`);
+              const sr = await fetch(`${pythonUrlRef.current}/api/snap_offset`);
               const snap = await sr.json();
               if (!snap.found) { servoStateRef.current = { phase: 'idle', lockedAt: null }; convergenceCountRef.current = 0; return; }
-              dx   = parseFloat(snap.offset_dx.toFixed(4));
-              dy   = parseFloat(snap.offset_dy.toFixed(4));
+              dx = parseFloat(snap.offset_dx.toFixed(4));
+              dy = parseFloat(snap.offset_dy.toFixed(4));
               dist = Math.hypot(dx, dy);
               // Sanity: sudden large offset after coarse move = false positive, restart
               if (dist > 1.5) {
@@ -1230,8 +1284,8 @@ export default function CameraPanel({
           } else {
             // Phase 1: coarse positioning via Hough circle
             if (!data.best_circle) return;
-            dx   = parseFloat(data.offset_dx.toFixed(4));
-            dy   = parseFloat(data.offset_dy.toFixed(4));
+            dx = parseFloat(data.offset_dx.toFixed(4));
+            dy = parseFloat(data.offset_dy.toFixed(4));
             dist = Math.hypot(dx, dy);
             if (dist > 8.0) return; // no fiducial in view
           }
@@ -1255,7 +1309,7 @@ export default function CameraPanel({
                 servoStateRef.current = { phase: 'converged', lockedAt: { x: machPos.x, y: machPos.y } };
                 convergenceCountRef.current = 0;
                 hasJoggedInCycleRef.current = false; // reset for next fiducial
-                const camOffset  = cameraOffset || { dx: 0, dy: 0 };
+                const camOffset = cameraOffset || { dx: 0, dy: 0 };
                 const savedCoord = { x: machPos.x + camOffset.dx, y: machPos.y + camOffset.dy };
                 saveFiducialCoordinate(savedCoord, 1.0);
                 console.log(`[PyServo] ✅ Converged (${CONVERGE_STABLE_FRAMES} stable frames). Saved X${savedCoord.x.toFixed(3)} Y${savedCoord.y.toFixed(3)}`);
@@ -1274,7 +1328,7 @@ export default function CameraPanel({
           }
 
           // Jog toward fiducial center. Coarse: faster + longer settle; Fine: normal.
-          const jogFeed  = servoPhase === 'idle' ? SERVO_FEED * 1.5 : SERVO_FEED;
+          const jogFeed = servoPhase === 'idle' ? SERVO_FEED * 1.5 : SERVO_FEED;
           const settleMs = servoPhase === 'idle' ? SERVO_SETTLE_MS + 400 : SERVO_SETTLE_MS;
           settleUntilRef.current = Date.now() + settleMs;
           console.log(`[PyServo] ${servoPhase === 'idle' ? 'Coarse' : 'Fine  '} jog ΔX:${dx.toFixed(3)} ΔY:${dy.toFixed(3)} mm`);
@@ -1464,7 +1518,7 @@ export default function CameraPanel({
     servoStateRef.current = { phase: 'converged', lockedAt: { x: machPos.x, y: machPos.y } };
 
     try {
-      const r = await fetch(`${PYTHON_URL}/api/snap_offset`, { signal: AbortSignal.timeout(2000) });
+      const r = await fetch(`${pythonUrlRef.current}/api/snap_offset`, { signal: AbortSignal.timeout(2000) });
       const data = await r.json();
 
       if (!data.found) {
@@ -1781,14 +1835,14 @@ export default function CameraPanel({
         {pythonMode ? (
           streamOn ? (
             <img
-              src={`${PYTHON_URL}/video_feed`}
+              src={`${pythonUrl}/video_feed`}
               alt="Python MJPEG Stream"
               style={{ width: '100%', height: 'auto', display: 'block', cursor: 'crosshair' }}
               onError={(e) => {
                 console.warn('[CameraPanel] MJPEG stream dropped, reconnecting in 2s...');
                 setTimeout(() => {
                   if (e.target) {
-                    e.target.src = `${PYTHON_URL}/video_feed?t=${Date.now()}`;
+                    e.target.src = `${pythonUrl}/video_feed?t=${Date.now()}`;
                   }
                 }, 2000);
               }}
@@ -1869,6 +1923,49 @@ export default function CameraPanel({
           {pythonMode ? '🐍 Python Mode' : '🌐 Browser Mode'}
           {pythonMode && <span style={{ marginLeft: 6, fontSize: '0.75em' }}>{pythonServerOk ? '🟢' : '🔴'}</span>}
         </button>
+        {pythonMode && (
+          <>
+            <input
+              type="text"
+              defaultValue={pythonUrl}
+              onBlur={e => {
+                const val = e.target.value.trim().replace(/\/$/, '');
+                if (val && val !== pythonUrlRef.current) {
+                  if (streamOn) stopCam();
+                  setPythonUrl(val);
+                }
+              }}
+              onKeyDown={e => { if (e.key === 'Enter') e.target.blur(); }}
+              title="Python Vision Server URL (e.g. http://192.168.1.42:8000)"
+              style={{
+                fontSize: '0.78em', padding: '3px 8px', borderRadius: 5, width: 210,
+                border: `1px solid ${pythonServerOk ? '#28a745' : '#dc3545'}`,
+                background: '#161b22', color: '#e6edf3',
+              }}
+            />
+            <select
+              value={camConfig.index}
+              onChange={e => applyCameraConfig({ index: Number(e.target.value) })}
+              title="Camera device index"
+              style={{ fontSize: '0.78em', padding: '3px 6px', borderRadius: 5, background: '#161b22', color: '#e6edf3', border: '1px solid #444' }}
+            >
+              {[0, 1, 2, 3].map(i => <option key={i} value={i}>Cam {i}</option>)}
+            </select>
+            <select
+              value={`${camConfig.width}x${camConfig.height}`}
+              onChange={e => {
+                const [w, h] = e.target.value.split('x').map(Number);
+                applyCameraConfig({ width: w, height: h });
+              }}
+              title="Camera resolution"
+              style={{ fontSize: '0.78em', padding: '3px 6px', borderRadius: 5, background: '#161b22', color: '#e6edf3', border: '1px solid #444' }}
+            >
+              {[['640x480', '640x480'], ['1280x720', '1280x720'], ['1920x1080', '1920x1080']].map(([v, l]) => (
+                <option key={v} value={v}>{l}</option>
+              ))}
+            </select>
+          </>
+        )}
         {!pythonMode && (
           <>
             <label className="row" style={{ gap: 8, marginLeft: 8 }}>
@@ -2097,57 +2194,6 @@ export default function CameraPanel({
           </div>
         </div> */}
       </div>
-
-      {/* Settings Row - Nozzle & Tool Offset */}
-      {/* <div className="camera-controls-row" style={{ marginTop: 12 }}> */}
-      {/* Nozzle & Dispensing */}
-      {/* <div className="box nozzle-section">
-          <legend>Nozzle & Dispensing</legend>
-          <div className="settings-grid">
-            <div className="settings-field">
-              <label>Diameter (mm)</label>
-              <input type="number" step="0.05" value={nozzleDia ?? 0.6}
-                onChange={e => setNozzleDia(Math.max(0.05, +e.target.value || 0.6))} />
-            </div>
-            <div className="settings-field">
-              <label>Pressure (bar)</label>
-              <input type="number" step="0.1" defaultValue="2.0" />
-            </div>
-            <div className="settings-field">
-              <label>Flow Rate (%)</label>
-              <input type="number" step="5" defaultValue="50" />
-            </div>
-            <div className="settings-field">
-              <label>Duration (ms)</label>
-              <input type="number" step="10" defaultValue="100" />
-            </div>
-          </div>
-          <div className="row" style={{ gap: 8 }}>
-            <button className="btn" disabled={!selectedDesign}>Test Dispense</button>
-            <button className="btn secondary">Prime Nozzle</button>
-          </div>
-        </div> */}
-
-      {/* Tool Offset */}
-      {/* <div className="box tool-offset-section">
-          <legend>Tool Offset</legend>
-          <div className="offset-inputs">
-            <div className="offset-field">
-              <span>ΔX (mm)</span>
-              <input type="number" step="0.01" value={toolOffset?.dx ?? 0}
-                onChange={e => setToolOffset({ dx: +e.target.value || 0, dy: toolOffset?.dy || 0 })} />
-            </div>
-            <div className="offset-field">
-              <span>ΔY (mm)</span>
-              <input type="number" step="0.01" value={toolOffset?.dy ?? 0}
-                onChange={e => setToolOffset({ dx: toolOffset?.dx || 0, dy: +e.target.value || 0 })} />
-            </div>
-          </div>
-          <small style={{ fontSize: '12px', color: '#6c757d' }}>
-            Offsets are added to machine XY before projecting to camera. Saved in your browser.
-          </small>
-        </div> */}
-      {/* </div> */}
     </div>
   );
 }

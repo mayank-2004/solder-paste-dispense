@@ -26,7 +26,7 @@ function idwCorrect(x, y, vectors, power = 2) {
 }
 
 // ── SPC (Statistical Process Control) helpers ────────────────────────────────
-const SPC_KEY     = 'spcDotQuality';
+const SPC_KEY = 'spcDotQuality';
 const SPC_MAX_JOBS = 60; // rolling window — oldest entries drop off
 
 function spcLoad() {
@@ -36,19 +36,19 @@ function spcLoad() {
 
 function spcAppend(dotResults, totalPads) {
   if (!dotResults || dotResults.length === 0) return;
-  const data  = spcLoad();
+  const data = spcLoad();
   const passed = dotResults.filter(r => r.passed).length;
-  const diams  = dotResults.filter(r => r.diameter_mm > 0).map(r => r.diameter_mm);
+  const diams = dotResults.filter(r => r.diameter_mm > 0).map(r => r.diameter_mm);
   data.jobs = [
     ...data.jobs,
     {
-      jobId:       new Date().toISOString(),
-      date:        new Date().toLocaleDateString(),
+      jobId: new Date().toISOString(),
+      date: new Date().toLocaleDateString(),
       totalPads,
-      checked:     dotResults.length,
+      checked: dotResults.length,
       passed,
-      failed:      dotResults.length - passed,
-      passRate:    passed / dotResults.length,
+      failed: dotResults.length - passed,
+      passRate: passed / dotResults.length,
       avgDiameter: diams.length ? diams.reduce((a, b) => a + b, 0) / diams.length : null,
       minDiameter: diams.length ? Math.min(...diams) : null,
     },
@@ -68,7 +68,7 @@ function Sparkline({ values, color = '#58a6ff', height = 36, width = '100%' }) {
     return `${x.toFixed(1)},${y.toFixed(1)}`;
   }).join(' ');
   const last = values[values.length - 1];
-  const lx   = W, ly = H - ((last - min) / range) * (H - 4) - 2;
+  const lx = W, ly = H - ((last - min) / range) * (H - 4) - 2;
   return (
     <svg viewBox={`0 0 ${W} ${H}`} style={{ width, height, display: 'block', overflow: 'visible' }}>
       <polyline points={pts} fill="none" stroke={color} strokeWidth="1.8" strokeLinejoin="round" />
@@ -261,10 +261,10 @@ export default function AutomatedDispensingPanel({
     window.fs?.loadSettings?.().then(res => {
       if (!res?.ok || !res.data) return;
       const s = res.data;
-      if (s.nozzleDia        != null) setNozzleDia(s.nozzleDia);
-      if (s.axisLimits       != null) setAxisLimits(s.axisLimits);
-      if (s.calibCaptures    != null) setCalibCaptures(s.calibCaptures);
-      if (s.pasteRecipes     != null) setSavedRecipes(s.pasteRecipes);
+      if (s.nozzleDia != null) setNozzleDia(s.nozzleDia);
+      if (s.axisLimits != null) setAxisLimits(s.axisLimits);
+      if (s.calibCaptures != null) setCalibCaptures(s.calibCaptures);
+      if (s.pasteRecipes != null) setSavedRecipes(s.pasteRecipes);
     });
     localStorage.removeItem('resumeFromPad');
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -496,8 +496,8 @@ export default function AutomatedDispensingPanel({
         const health = computeNozzleHealth(nozzleMaintenance.getMaintenanceStatus(), spcData.jobs);
         const label = health >= 75 ? 'Nozzle healthy'
           : health >= 50 ? 'Clean nozzle soon'
-          : health >= 25 ? 'Clean nozzle now'
-          : 'Poor dot quality — consider replacement';
+            : health >= 25 ? 'Clean nozzle now'
+              : 'Poor dot quality — consider replacement';
         return {
           id: 'nozzleHealth',
           label: 'Nozzle health',
@@ -1001,7 +1001,7 @@ export default function AutomatedDispensingPanel({
       setIsJobRunning(false);
 
     } catch (e) {
-      console.error(e); 
+      console.error(e);
       const pad = globalPointCountRef.current;
       if (e.message === 'Job Aborted') {
         // cancelJob already showed a toast — nothing extra needed
@@ -1160,20 +1160,20 @@ export default function AutomatedDispensingPanel({
   const handleLoadRecipe = (name) => {
     const r = savedRecipes[name];
     if (!r) return;
-    if (r.localPressure     != null) setLocalPressure(r.localPressure);
-    if (r.baseDwellTime     != null) setBaseDwellTime(r.baseDwellTime);
-    if (r.dispenseHeight    != null) setDispenseHeight(r.dispenseHeight);
-    if (r.safeTravelHeight  != null) setSafeTravelHeight(r.safeTravelHeight);
-    if (r.viscosity         != null) setViscosity(r.viscosity);
+    if (r.localPressure != null) setLocalPressure(r.localPressure);
+    if (r.baseDwellTime != null) setBaseDwellTime(r.baseDwellTime);
+    if (r.dispenseHeight != null) setDispenseHeight(r.dispenseHeight);
+    if (r.safeTravelHeight != null) setSafeTravelHeight(r.safeTravelHeight);
+    if (r.viscosity != null) setViscosity(r.viscosity);
     if (r.beadAreaThreshold != null) setBeadAreaThreshold(r.beadAreaThreshold);
-    if (r.beadFeedRate      != null) setBeadFeedRate(r.beadFeedRate);
-    if (r.purgeEnabled      != null) setPurgeEnabled(r.purgeEnabled);
-    if (r.purgeDurationMs   != null) setPurgeDurationMs(r.purgeDurationMs);
-    if (r.valveOnCmd        != null) setValveOnCmd(r.valveOnCmd);
-    if (r.valveOffCmd       != null) setValveOffCmd(r.valveOffCmd);
+    if (r.beadFeedRate != null) setBeadFeedRate(r.beadFeedRate);
+    if (r.purgeEnabled != null) setPurgeEnabled(r.purgeEnabled);
+    if (r.purgeDurationMs != null) setPurgeDurationMs(r.purgeDurationMs);
+    if (r.valveOnCmd != null) setValveOnCmd(r.valveOnCmd);
+    if (r.valveOffCmd != null) setValveOffCmd(r.valveOffCmd);
     if (r.enableDotVerification != null) setEnableDotVerification(r.enableDotVerification);
-    if (r.enableSurfaceProbe    != null) setEnableSurfaceProbe(r.enableSurfaceProbe);
-    if (r.nozzleDia         != null) setNozzleDia(r.nozzleDia);
+    if (r.enableSurfaceProbe != null) setEnableSurfaceProbe(r.enableSurfaceProbe);
+    if (r.nozzleDia != null) setNozzleDia(r.nozzleDia);
     setActiveRecipe(name);
     setRecipeName(name);
   };
@@ -1213,956 +1213,970 @@ export default function AutomatedDispensingPanel({
 
   return (
     <>
-    <div className="panel automated-panel">
-      <h3 style={{ marginLeft: '10px' }}>🤖 Automated Dispensing</h3>
-      <div className='panel-data'>
-        <div className="box">
-          <h4>Settings</h4>
-          <label style={{ display: 'block', marginBottom: '8px' }}>
-            <input type="checkbox" checked={useSafePathPlanning} onChange={e => setUseSafePathPlanning(e.target.checked)} />
-            Safe Path Planning
-          </label>
-          <hr style={{ borderColor: '#444', margin: '12px 0' }} />
-          <h5>G-Code Generation Config</h5>
-          <div className="grid2" style={{ gap: '8px', fontSize: '0.9em' }}>
-            <label style={{ gridColumn: '1 / -1' }}>
-              Paste Viscosity (Presets):
-              <select value={viscosity} onChange={e => setViscosity(e.target.value)} style={{ width: '100%', marginTop: '4px', padding: '4px' }}>
-                <option value="low">Thin / Low (Type 3 Fine)</option>
-                <option value="medium">Medium (Type 4 Standard)</option>
-                <option value="high">Thick / High (Type 5 / No-Clean)</option>
-              </select>
+      <div className="panel automated-panel">
+        <h3 style={{ marginLeft: '10px' }}>🤖 Automated Dispensing</h3>
+        <div className='panel-data'>
+          <div className="box">
+            <h4>Settings</h4>
+            <label style={{ display: 'block', marginBottom: '8px' }}>
+              <input type="checkbox" checked={useSafePathPlanning} onChange={e => setUseSafePathPlanning(e.target.checked)} />
+              Safe Path Planning
             </label>
-            <label>
-              Valve ON Cmd:
-              <input type="text" value={valveOnCmd} onChange={e => setValveOnCmd(e.target.value)} style={{ width: '100%', marginTop: '4px' }} />
-            </label>
-            <label>
-              Valve OFF Cmd:
-              <input type="text" value={valveOffCmd} onChange={e => setValveOffCmd(e.target.value)} style={{ width: '100%', marginTop: '4px' }} />
-            </label>
-            <label>
-              Dispense Z (mm):
-              <input type="number" step="0.1" value={dispenseHeight} onChange={e => setDispenseHeight(parseFloat(e.target.value))} style={{ width: '100%', marginTop: '4px' }} />
-            </label>
-            <label>
-              Safe Travel Z (mm):
-              <input type="number" step="1" value={safeTravelHeight} onChange={e => setSafeTravelHeight(parseFloat(e.target.value))} style={{ width: '100%', marginTop: '4px' }} />
-            </label>
-            <label style={{ gridColumn: '1 / -1' }}>
-              <span style={{ color: '#f85149', fontWeight: 600 }}>⬛ Axis Limits (mm)</span>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6, marginTop: 4 }}>
-                <label style={{ fontSize: '0.85em' }}>
-                  Max X
-                  <input type="number" step="10" min="10" value={axisLimits.maxX}
-                    onChange={e => setAxisLimits(l => ({ ...l, maxX: Number(e.target.value) }))}
-                    style={{ width: '100%', marginTop: 2 }} />
-                </label>
-                <label style={{ fontSize: '0.85em' }}>
-                  Max Y
-                  <input type="number" step="10" min="10" value={axisLimits.maxY}
-                    onChange={e => setAxisLimits(l => ({ ...l, maxY: Number(e.target.value) }))}
-                    style={{ width: '100%', marginTop: 2 }} />
-                </label>
-                <label style={{ fontSize: '0.85em' }}>
-                  Max Z
-                  <input type="number" step="5" min="5" value={axisLimits.maxZ}
-                    onChange={e => setAxisLimits(l => ({ ...l, maxZ: Number(e.target.value) }))}
-                    style={{ width: '100%', marginTop: 2 }} />
-                </label>
-              </div>
-              <small style={{ color: '#8b949e' }}>Min is always 0. Pre-flight will fail if any pad exceeds these.</small>
-            </label>
-            <label>
-              Base Dwell (ms):
-              <input type="number" step="10" value={baseDwellTime} onChange={e => setBaseDwellTime(Number(e.target.value))} style={{ width: '100%', marginTop: '4px' }} />
-            </label>
-            <label>
-              Dispense Pressure (PSI):
-              <input type="number" step="1" min="10" max="100" value={localPressure} onChange={e => setLocalPressure(Number(e.target.value))} style={{ width: '100%', marginTop: '4px' }} />
-              <small style={{ color: '#888' }}>Typical solder paste: 30–60 PSI</small>
-            </label>
-            <label>
-              Bead Threshold (mm²):
-              <input type="number" step="0.5" min="0.5" max="20" value={beadAreaThreshold} onChange={e => setBeadAreaThreshold(Number(e.target.value))} style={{ width: '100%', marginTop: '4px' }} />
-              <small style={{ color: '#888' }}>Pads above this area → bead; below → single dot</small>
-            </label>
-            <label>
-              Bead Speed (mm/min):
-              <input type="number" step="50" min="50" max="3000" value={beadFeedRate} onChange={e => setBeadFeedRate(Number(e.target.value))} style={{ width: '100%', marginTop: '4px' }} />
-            </label>
-            {purgeEnabled && (
-              <label>
-                Purge Duration (ms):
-                <input
-                  type="number"
-                  step="500"
-                  min="500"
-                  max="10000"
-                  value={purgeDurationMs}
-                  onChange={e => setPurgeDurationMs(Number(e.target.value))}
-                  style={{ width: '100%', marginTop: '4px' }}
-                />
+            <hr style={{ borderColor: '#444', margin: '12px 0' }} />
+            <h5>G-Code Generation Config</h5>
+            <div className="grid2" style={{ gap: '8px', fontSize: '0.9em' }}>
+              <label style={{ gridColumn: '1 / -1' }}>
+                Paste Viscosity (Presets):
+                <select value={viscosity} onChange={e => setViscosity(e.target.value)} style={{ width: '100%', marginTop: '4px', padding: '4px' }}>
+                  <option value="low">Thin / Low (Type 3 Fine)</option>
+                  <option value="medium">Medium (Type 4 Standard)</option>
+                  <option value="high">Thick / High (Type 5 / No-Clean)</option>
+                </select>
               </label>
-            )}
-            <br />
-            <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', gridColumn: '1 / -1' }}>
-              <input
-                type="checkbox"
-                checked={enableSurfaceProbe}
-                onChange={e => setEnableSurfaceProbe(e.target.checked)}
-                style={{ width: 'auto', marginTop: 0 }}
-              />
-              <span>Z-axis surface probe before dispensing</span>
-            </label>
-            {enableSurfaceProbe && (
-              <div style={{ gridColumn: '1 / -1', fontSize: '0.78em', color: '#8b949e', paddingLeft: 22, marginTop: -4 }}>
-                Sends <code>G38.2 Z-30 F50</code> after PCB load — detects actual PCB surface, sets Z=0 there. Dispense Z is then clearance above that surface. Requires a probe/BLTouch wired to the controller.
-              </div>
-            )}
-            <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
-              <input
-                type="checkbox"
-                checked={enableDotVerification}
-                onChange={e => setEnableDotVerification(e.target.checked)}
-                style={{ width: 'auto', marginTop: 0 }}
-              />
-              <span>Verify paste dot after each pad</span>
-            </label>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
-              <input
-                type="checkbox"
-                checked={purgeEnabled}
-                onChange={e => setPurgeEnabled(e.target.checked)}
-                style={{ width: 'auto', marginTop: 0 }}
-              />
-              <span>Purge nozzle before job</span>
-            </label>
-          </div>
-
-          {/* ── Recipe Manager ──────────────────────────────────────────── */}
-          <details style={{ marginTop: 14 }}>
-            <summary style={{ cursor: 'pointer', fontWeight: 600, color: '#58a6ff', fontSize: '0.9em', userSelect: 'none' }}>
-              🗂 Recipe Manager
-            </summary>
-            <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
-
-              {/* Save current settings */}
-              <div style={{ display: 'flex', gap: 6 }}>
-                <input
-                  type="text"
-                  placeholder="Recipe name…"
-                  value={recipeName}
-                  onChange={e => setRecipeName(e.target.value)}
-                  onKeyDown={e => e.key === 'Enter' && handleSaveRecipe()}
-                  style={{ flex: 1, padding: '4px 8px', fontSize: '0.85em', background: '#161b22', border: '1px solid #30363d', color: '#e6edf3', borderRadius: 4 }}
-                />
-                <button
-                  className="btn"
-                  style={{ fontSize: '0.82em', padding: '4px 12px', whiteSpace: 'nowrap' }}
-                  disabled={!recipeName.trim()}
-                  onClick={handleSaveRecipe}
-                  title="Save current settings as a recipe"
-                >💾 Save</button>
-              </div>
-
-              {/* Saved recipes list */}
-              {Object.keys(savedRecipes).length > 0 ? (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 190, overflowY: 'auto' }}>
-                  {Object.keys(savedRecipes).map(name => (
-                    <div key={name} style={{
-                      display: 'flex', alignItems: 'center', gap: 6, padding: '5px 8px',
-                      background: activeRecipe === name ? 'rgba(88,166,255,0.1)' : '#161b22',
-                      border: `1px solid ${activeRecipe === name ? '#58a6ff44' : '#30363d'}`,
-                      borderRadius: 4, fontSize: '0.82em',
-                    }}>
-                      <span style={{ flex: 1, color: '#e6edf3', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={name}>
-                        {activeRecipe === name && <span style={{ color: '#58a6ff', marginRight: 4 }}>▶</span>}
-                        {name}
-                      </span>
-                      <button
-                        style={{ fontSize: '0.75em', padding: '2px 8px', background: '#1f6feb', color: '#fff', border: 'none', borderRadius: 3, cursor: 'pointer', flexShrink: 0 }}
-                        onClick={() => handleLoadRecipe(name)}
-                      >Load</button>
-                      <button
-                        style={{ fontSize: '0.75em', padding: '2px 6px', background: 'transparent', color: '#f85149', border: '1px solid #f8514966', borderRadius: 3, cursor: 'pointer', flexShrink: 0 }}
-                        onClick={() => handleDeleteRecipe(name)}
-                        title={`Delete "${name}"`}
-                      >✕</button>
-                    </div>
-                  ))}
+              <label>
+                Valve ON Cmd:
+                <input type="text" value={valveOnCmd} onChange={e => setValveOnCmd(e.target.value)} style={{ width: '100%', marginTop: '4px' }} />
+              </label>
+              <label>
+                Valve OFF Cmd:
+                <input type="text" value={valveOffCmd} onChange={e => setValveOffCmd(e.target.value)} style={{ width: '100%', marginTop: '4px' }} />
+              </label>
+              <label>
+                Dispense Z (mm):
+                <input type="number" step="0.1" value={dispenseHeight} onChange={e => setDispenseHeight(parseFloat(e.target.value))} style={{ width: '100%', marginTop: '4px' }} />
+              </label>
+              <label>
+                Safe Travel Z (mm):
+                <input type="number" step="1" value={safeTravelHeight} onChange={e => setSafeTravelHeight(parseFloat(e.target.value))} style={{ width: '100%', marginTop: '4px' }} />
+              </label>
+              <label style={{ gridColumn: '1 / -1' }}>
+                <span style={{ color: '#f85149', fontWeight: 600 }}>⬛ Axis Limits (mm)</span>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6, marginTop: 4 }}>
+                  <label style={{ fontSize: '0.85em' }}>
+                    Max X
+                    <input type="number" step="10" min="10" value={axisLimits.maxX}
+                      onChange={e => setAxisLimits(l => ({ ...l, maxX: Number(e.target.value) }))}
+                      style={{ width: '100%', marginTop: 2 }} />
+                  </label>
+                  <label style={{ fontSize: '0.85em' }}>
+                    Max Y
+                    <input type="number" step="10" min="10" value={axisLimits.maxY}
+                      onChange={e => setAxisLimits(l => ({ ...l, maxY: Number(e.target.value) }))}
+                      style={{ width: '100%', marginTop: 2 }} />
+                  </label>
+                  <label style={{ fontSize: '0.85em' }}>
+                    Max Z
+                    <input type="number" step="5" min="5" value={axisLimits.maxZ}
+                      onChange={e => setAxisLimits(l => ({ ...l, maxZ: Number(e.target.value) }))}
+                      style={{ width: '100%', marginTop: 2 }} />
+                  </label>
                 </div>
-              ) : (
-                <div style={{ color: '#8b949e', fontSize: '0.8em', fontStyle: 'italic', padding: '4px 0' }}>
-                  No saved recipes. Enter a name above and click Save.
+                <small style={{ color: '#8b949e' }}>Min is always 0. Pre-flight will fail if any pad exceeds these.</small>
+              </label>
+              <label>
+                Base Dwell (ms):
+                <input type="number" step="10" value={baseDwellTime} onChange={e => setBaseDwellTime(Number(e.target.value))} style={{ width: '100%', marginTop: '4px' }} />
+              </label>
+              <label>
+                Dispense Pressure (PSI):
+                <input type="number" step="1" min="10" max="100" value={localPressure} onChange={e => setLocalPressure(Number(e.target.value))} style={{ width: '100%', marginTop: '4px' }} />
+                <small style={{ color: '#888' }}>Typical solder paste: 30–60 PSI</small>
+              </label>
+              <label>
+                Bead Threshold (mm²):
+                <input type="number" step="0.5" min="0.5" max="20" value={beadAreaThreshold} onChange={e => setBeadAreaThreshold(Number(e.target.value))} style={{ width: '100%', marginTop: '4px' }} />
+                <small style={{ color: '#888' }}>Pads above this area → bead; below → single dot</small>
+              </label>
+              <label>
+                Bead Speed (mm/min):
+                <input type="number" step="50" min="50" max="3000" value={beadFeedRate} onChange={e => setBeadFeedRate(Number(e.target.value))} style={{ width: '100%', marginTop: '4px' }} />
+              </label>
+              {purgeEnabled && (
+                <label>
+                  Purge Duration (ms):
+                  <input
+                    type="number"
+                    step="500"
+                    min="500"
+                    max="10000"
+                    value={purgeDurationMs}
+                    onChange={e => setPurgeDurationMs(Number(e.target.value))}
+                    style={{ width: '100%', marginTop: '4px' }}
+                  />
+                </label>
+              )}
+              <br />
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', gridColumn: '1 / -1' }}>
+                <input
+                  type="checkbox"
+                  checked={enableSurfaceProbe}
+                  onChange={e => setEnableSurfaceProbe(e.target.checked)}
+                  style={{ width: 'auto', marginTop: 0 }}
+                />
+                <span>Z-axis surface probe before dispensing</span>
+              </label>
+              {enableSurfaceProbe && (
+                <div style={{ gridColumn: '1 / -1', fontSize: '0.78em', color: '#8b949e', paddingLeft: 22, marginTop: -4 }}>
+                  Sends <code>G38.2 Z-30 F50</code> after PCB load — detects actual PCB surface, sets Z=0 there. Dispense Z is then clearance above that surface. Requires a probe/BLTouch wired to the controller.
                 </div>
               )}
-
-              {/* Import / Export */}
-              <div style={{ display: 'flex', gap: 6, borderTop: '1px solid #21262d', paddingTop: 8, marginTop: 2 }}>
-                <button
-                  className="btn secondary"
-                  style={{ flex: 1, fontSize: '0.78em', padding: '4px 0' }}
-                  disabled={Object.keys(savedRecipes).length === 0}
-                  onClick={handleExportRecipes}
-                  title="Download all recipes as a JSON file"
-                >⬇ Export JSON</button>
-                <label style={{ flex: 1 }}>
-                  <span className="btn secondary" style={{ display: 'block', textAlign: 'center', fontSize: '0.78em', padding: '4px 0', cursor: 'pointer' }}>
-                    ⬆ Import JSON
-                  </span>
-                  <input type="file" accept=".json" style={{ display: 'none' }} onChange={handleImportRecipes} />
-                </label>
-              </div>
-
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={enableDotVerification}
+                  onChange={e => setEnableDotVerification(e.target.checked)}
+                  style={{ width: 'auto', marginTop: 0 }}
+                />
+                <span>Verify paste dot after each pad</span>
+              </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={purgeEnabled}
+                  onChange={e => setPurgeEnabled(e.target.checked)}
+                  style={{ width: 'auto', marginTop: 0 }}
+                />
+                <span>Purge nozzle before job</span>
+              </label>
             </div>
-          </details>
 
-          {/* ── SPC / Dot Quality Trend  ── */}
-          {(() => {
-            const jobs = spcData.jobs;
-            if (jobs.length === 0 && !enableDotVerification) return null;
-
-            const recent   = jobs.slice(-10);
-            const passRates = recent.map(j => j.passRate * 100);
-            const diameters = recent.filter(j => j.avgDiameter != null).map(j => j.avgDiameter);
-
-            const overallPass  = jobs.length > 0
-              ? jobs.reduce((s, j) => s + j.passed, 0) / jobs.reduce((s, j) => s + j.checked, 0) * 100
-              : null;
-            const recentAvgPass = recent.length > 0
-              ? recent.reduce((s, j) => s + j.passRate, 0) / recent.length * 100
-              : null;
-
-            // Nozzle wear: compare first-half vs second-half avg diameter
-            const half = Math.floor(diameters.length / 2);
-            const diamTrend = half >= 2
-              ? (diameters.slice(half).reduce((a, b) => a + b, 0) / (diameters.length - half)) -
-                (diameters.slice(0, half).reduce((a, b) => a + b, 0) / half)
-              : 0;
-
-            const qualityAlert = recentAvgPass !== null && recentAvgPass < 80;
-            const wearAlert    = diamTrend < -0.05;
-
-            return (
-              <details style={{ marginTop: 14 }} open={qualityAlert || wearAlert}>
-                <summary style={{ cursor: 'pointer', fontWeight: 600, color: qualityAlert || wearAlert ? '#f85149' : '#58a6ff', fontSize: '0.9em', userSelect: 'none' }}>
-                  📊 SPC — Dot Quality Trend {(qualityAlert || wearAlert) && '⚠'}
-                </summary>
-                <div style={{ marginTop: 10, fontSize: '0.82em', display: 'flex', flexDirection: 'column', gap: 8 }}>
-
-                  {/* Alert banners */}
-                  {qualityAlert && (
-                    <div style={{ padding: '6px 10px', background: 'rgba(220,50,50,0.12)', border: '1px solid #f85149', borderRadius: 5, color: '#f85149' }}>
-                      ⚠ Recent pass rate {recentAvgPass.toFixed(0)}% — below 80% threshold. Consider purging or replacing the nozzle.
-                    </div>
-                  )}
-                  {wearAlert && !qualityAlert && (
-                    <div style={{ padding: '6px 10px', background: 'rgba(227,179,65,0.12)', border: '1px solid #e3b341', borderRadius: 5, color: '#e3b341' }}>
-                      ⚠ Dot diameter shrinking ({(diamTrend * 1000).toFixed(0)} µm/job trend) — possible nozzle clogging.
-                    </div>
-                  )}
-
-                  {jobs.length === 0 ? (
-                    <div style={{ color: '#8b949e', fontStyle: 'italic' }}>
-                      No data yet. Enable "Verify paste dot after each pad" and run a job to start tracking.
-                    </div>
-                  ) : (
-                    <>
-                      {/* Summary stats */}
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6 }}>
-                        <div style={{ background: '#161b22', borderRadius: 5, padding: '6px 8px', textAlign: 'center' }}>
-                          <div style={{ color: '#8b949e', fontSize: '0.78em' }}>Jobs tracked</div>
-                          <div style={{ color: '#e6edf3', fontWeight: 700, fontSize: '1.1em' }}>{jobs.length}</div>
-                        </div>
-                        <div style={{ background: '#161b22', borderRadius: 5, padding: '6px 8px', textAlign: 'center' }}>
-                          <div style={{ color: '#8b949e', fontSize: '0.78em' }}>Overall pass</div>
-                          <div style={{ color: overallPass >= 90 ? '#3fb950' : overallPass >= 75 ? '#e3b341' : '#f85149', fontWeight: 700, fontSize: '1.1em' }}>
-                            {overallPass != null ? `${overallPass.toFixed(1)}%` : '—'}
-                          </div>
-                        </div>
-                        <div style={{ background: '#161b22', borderRadius: 5, padding: '6px 8px', textAlign: 'center' }}>
-                          <div style={{ color: '#8b949e', fontSize: '0.78em' }}>Avg diameter</div>
-                          <div style={{ color: '#58a6ff', fontWeight: 700, fontSize: '1.1em' }}>
-                            {diameters.length > 0 ? `${(diameters.reduce((a, b) => a + b, 0) / diameters.length).toFixed(2)} mm` : '—'}
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Pass rate sparkline */}
-                      {passRates.length >= 2 && (
-                        <div>
-                          <div style={{ color: '#8b949e', marginBottom: 3 }}>Pass rate — last {recent.length} jobs</div>
-                          <div style={{ background: '#161b22', borderRadius: 5, padding: '6px 8px' }}>
-                            <Sparkline values={passRates} color={recentAvgPass >= 80 ? '#3fb950' : '#f85149'} height={40} />
-                            <div style={{ display: 'flex', justifyContent: 'space-between', color: '#8b949e', fontSize: '0.76em', marginTop: 2 }}>
-                              <span>← oldest</span>
-                              <span>{passRates[passRates.length - 1].toFixed(0)}% latest</span>
-                            </div>
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Diameter sparkline */}
-                      {diameters.length >= 2 && (
-                        <div>
-                          <div style={{ color: '#8b949e', marginBottom: 3 }}>Avg dot diameter (mm) — last {diameters.length} jobs</div>
-                          <div style={{ background: '#161b22', borderRadius: 5, padding: '6px 8px' }}>
-                            <Sparkline values={diameters} color={wearAlert ? '#e3b341' : '#58a6ff'} height={40} />
-                            <div style={{ display: 'flex', justifyContent: 'space-between', color: '#8b949e', fontSize: '0.76em', marginTop: 2 }}>
-                              <span>← oldest</span>
-                              <span>{diameters[diameters.length - 1].toFixed(3)} mm latest</span>
-                            </div>
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Per-job history table */}
-                      <details>
-                        <summary style={{ cursor: 'pointer', color: '#8b949e', fontSize: '0.8em' }}>Show job history ({jobs.length} entries)</summary>
-                        <div style={{ maxHeight: 160, overflowY: 'auto', marginTop: 6 }}>
-                          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.78em' }}>
-                            <thead>
-                              <tr style={{ color: '#8b949e', textAlign: 'left' }}>
-                                <th style={{ padding: '2px 6px' }}>Date</th>
-                                <th style={{ padding: '2px 6px' }}>Pass</th>
-                                <th style={{ padding: '2px 6px' }}>Fail</th>
-                                <th style={{ padding: '2px 6px' }}>Rate</th>
-                                <th style={{ padding: '2px 6px' }}>Avg ⌀</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {[...jobs].reverse().map((j, i) => (
-                                <tr key={i} style={{ borderTop: '1px solid #21262d' }}>
-                                  <td style={{ padding: '2px 6px', color: '#8b949e' }}>{j.date}</td>
-                                  <td style={{ padding: '2px 6px', color: '#3fb950' }}>{j.passed}</td>
-                                  <td style={{ padding: '2px 6px', color: j.failed > 0 ? '#f85149' : '#8b949e' }}>{j.failed}</td>
-                                  <td style={{ padding: '2px 6px', color: j.passRate >= 0.9 ? '#3fb950' : j.passRate >= 0.75 ? '#e3b341' : '#f85149', fontWeight: 600 }}>
-                                    {(j.passRate * 100).toFixed(0)}%
-                                  </td>
-                                  <td style={{ padding: '2px 6px', color: '#58a6ff' }}>
-                                    {j.avgDiameter != null ? `${j.avgDiameter.toFixed(3)}` : '—'}
-                                  </td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
-                      </details>
-
-                      <button
-                        className="btn secondary"
-                        style={{ fontSize: '0.78em', padding: '4px 0', marginTop: 2 }}
-                        onClick={async () => { if (await showConfirm('Clear all SPC data?')) { localStorage.removeItem(SPC_KEY); setSpcData({ jobs: [] }); } }}
-                      >🗑 Clear SPC Data</button>
-                    </>
-                  )}
+            {/* ── Recipe Manager ──────────────────────────────────────────── */}
+            <details open style={{ marginTop: 14 }}>
+              <summary style={{ cursor: 'pointer', fontWeight: 600, color: '#58a6ff', fontSize: '0.9em', userSelect: 'none' }}>
+                Recipe Manager
+                {activeRecipe && (
+                  <span style={{ marginLeft: 8, fontSize: '0.82em', color: '#3fb950', fontWeight: 400 }}>
+                    — {activeRecipe}
+                  </span>
+                )}
+              </summary>
+              <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {/* Save current settings */}
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <input
+                    type="text"
+                    placeholder="Recipe name…"
+                    value={recipeName}
+                    onChange={e => setRecipeName(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && handleSaveRecipe()}
+                    style={{ flex: 1, padding: '4px 8px', fontSize: '0.85em', background: '#161b22', border: '1px solid #30363d', color: '#e6edf3', borderRadius: 4 }}
+                  />
+                  <button
+                    className="btn"
+                    style={{ fontSize: '0.82em', padding: '4px 12px', whiteSpace: 'nowrap' }}
+                    disabled={!recipeName.trim()}
+                    onClick={handleSaveRecipe}
+                    title="Save current settings as a recipe"
+                  >💾 Save</button>
                 </div>
-              </details>
-            );
-          })()}
 
-          {/* Fine-Tune XY Correction UI disabled — fineTuneX and fineTuneY state removed */}
-          <div style={{ marginTop: 14 }}>
-            <PasteGauge
-              summary={pasteSummary}
-              nozzleDia={nozzleDia}
-              onNozzleDia={setNozzleDia}
-              onStockChange={(v) => { setPasteStock(v); }}
-              onRefill={(v) => { setPasteStock(v); }}
+                {/* Saved recipes list */}
+                {Object.keys(savedRecipes).length > 0 ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 190, overflowY: 'auto' }}>
+                    {Object.keys(savedRecipes).map(name => (
+                      <div key={name} style={{
+                        display: 'flex', alignItems: 'center', gap: 6, padding: '5px 8px',
+                        background: activeRecipe === name ? 'rgba(88,166,255,0.1)' : '#161b22',
+                        border: `1px solid ${activeRecipe === name ? '#58a6ff44' : '#30363d'}`,
+                        borderRadius: 4, fontSize: '0.82em',
+                      }}>
+                        <span style={{ flex: 1, color: '#e6edf3', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={name}>
+                          {activeRecipe === name && <span style={{ color: '#58a6ff', marginRight: 4 }}>▶</span>}
+                          {name}
+                        </span>
+                        <button
+                          style={{ fontSize: '0.75em', padding: '2px 8px', background: '#1f6feb', color: '#fff', border: 'none', borderRadius: 3, cursor: 'pointer', flexShrink: 0 }}
+                          onClick={() => handleLoadRecipe(name)}
+                        >Load</button>
+                        <button
+                          style={{ fontSize: '0.75em', padding: '2px 6px', background: 'transparent', color: '#f85149', border: '1px solid #f8514966', borderRadius: 3, cursor: 'pointer', flexShrink: 0 }}
+                          onClick={() => handleDeleteRecipe(name)}
+                          title={`Delete "${name}"`}
+                        >✕</button>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div style={{ color: '#8b949e', fontSize: '0.8em', fontStyle: 'italic', padding: '4px 0' }}>
+                    No saved recipes. Enter a name above and click Save.
+                  </div>
+                )}
+
+                {/* Import / Export */}
+                <div style={{ display: 'flex', gap: 6, borderTop: '1px solid #21262d', paddingTop: 8, marginTop: 2 }}>
+                  <button
+                    className="btn secondary"
+                    style={{ flex: 1, fontSize: '0.78em', padding: '4px 0' }}
+                    disabled={Object.keys(savedRecipes).length === 0}
+                    onClick={handleExportRecipes}
+                    title="Download all recipes as a JSON file"
+                  >⬇ Export JSON</button>
+                  <label
+                    className="btn secondary import-json-btn"
+                    style={{
+                      flex: 1,
+                      fontSize: '0.78em',
+                      padding: '4px 0',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    ⬆ Import JSON
+                    <input
+                      type="file"
+                      accept=".json"
+                      style={{ display: 'none' }}
+                      onChange={handleImportRecipes}
+                    />
+                  </label>
+                </div>
+              </div>
+            </details>
+
+            {/* ── SPC / Dot Quality Trend  ── */}
+            {(() => {
+              const jobs = spcData.jobs;
+              if (jobs.length === 0 && !enableDotVerification) return null;
+
+              const recent = jobs.slice(-10);
+              const passRates = recent.map(j => j.passRate * 100);
+              const diameters = recent.filter(j => j.avgDiameter != null).map(j => j.avgDiameter);
+
+              const overallPass = jobs.length > 0
+                ? jobs.reduce((s, j) => s + j.passed, 0) / jobs.reduce((s, j) => s + j.checked, 0) * 100
+                : null;
+              const recentAvgPass = recent.length > 0
+                ? recent.reduce((s, j) => s + j.passRate, 0) / recent.length * 100
+                : null;
+
+              // Nozzle wear: compare first-half vs second-half avg diameter
+              const half = Math.floor(diameters.length / 2);
+              const diamTrend = half >= 2
+                ? (diameters.slice(half).reduce((a, b) => a + b, 0) / (diameters.length - half)) -
+                (diameters.slice(0, half).reduce((a, b) => a + b, 0) / half)
+                : 0;
+
+              const qualityAlert = recentAvgPass !== null && recentAvgPass < 80;
+              const wearAlert = diamTrend < -0.05;
+
+              return (
+                <details style={{ marginTop: 14 }} open={qualityAlert || wearAlert}>
+                  <summary style={{ cursor: 'pointer', fontWeight: 600, color: qualityAlert || wearAlert ? '#f85149' : '#58a6ff', fontSize: '0.9em', userSelect: 'none' }}>
+                    📊 SPC — Dot Quality Trend {(qualityAlert || wearAlert) && '⚠'}
+                  </summary>
+                  <div style={{ marginTop: 10, fontSize: '0.82em', display: 'flex', flexDirection: 'column', gap: 8 }}>
+
+                    {/* Alert banners */}
+                    {qualityAlert && (
+                      <div style={{ padding: '6px 10px', background: 'rgba(220,50,50,0.12)', border: '1px solid #f85149', borderRadius: 5, color: '#f85149' }}>
+                        ⚠ Recent pass rate {recentAvgPass.toFixed(0)}% — below 80% threshold. Consider purging or replacing the nozzle.
+                      </div>
+                    )}
+                    {wearAlert && !qualityAlert && (
+                      <div style={{ padding: '6px 10px', background: 'rgba(227,179,65,0.12)', border: '1px solid #e3b341', borderRadius: 5, color: '#e3b341' }}>
+                        ⚠ Dot diameter shrinking ({(diamTrend * 1000).toFixed(0)} µm/job trend) — possible nozzle clogging.
+                      </div>
+                    )}
+
+                    {jobs.length === 0 ? (
+                      <div style={{ color: '#8b949e', fontStyle: 'italic' }}>
+                        No data yet. Enable "Verify paste dot after each pad" and run a job to start tracking.
+                      </div>
+                    ) : (
+                      <>
+                        {/* Summary stats */}
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6 }}>
+                          <div style={{ background: '#161b22', borderRadius: 5, padding: '6px 8px', textAlign: 'center' }}>
+                            <div style={{ color: '#8b949e', fontSize: '0.78em' }}>Jobs tracked</div>
+                            <div style={{ color: '#e6edf3', fontWeight: 700, fontSize: '1.1em' }}>{jobs.length}</div>
+                          </div>
+                          <div style={{ background: '#161b22', borderRadius: 5, padding: '6px 8px', textAlign: 'center' }}>
+                            <div style={{ color: '#8b949e', fontSize: '0.78em' }}>Overall pass</div>
+                            <div style={{ color: overallPass >= 90 ? '#3fb950' : overallPass >= 75 ? '#e3b341' : '#f85149', fontWeight: 700, fontSize: '1.1em' }}>
+                              {overallPass != null ? `${overallPass.toFixed(1)}%` : '—'}
+                            </div>
+                          </div>
+                          <div style={{ background: '#161b22', borderRadius: 5, padding: '6px 8px', textAlign: 'center' }}>
+                            <div style={{ color: '#8b949e', fontSize: '0.78em' }}>Avg diameter</div>
+                            <div style={{ color: '#58a6ff', fontWeight: 700, fontSize: '1.1em' }}>
+                              {diameters.length > 0 ? `${(diameters.reduce((a, b) => a + b, 0) / diameters.length).toFixed(2)} mm` : '—'}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Pass rate sparkline */}
+                        {passRates.length >= 2 && (
+                          <div>
+                            <div style={{ color: '#8b949e', marginBottom: 3 }}>Pass rate — last {recent.length} jobs</div>
+                            <div style={{ background: '#161b22', borderRadius: 5, padding: '6px 8px' }}>
+                              <Sparkline values={passRates} color={recentAvgPass >= 80 ? '#3fb950' : '#f85149'} height={40} />
+                              <div style={{ display: 'flex', justifyContent: 'space-between', color: '#8b949e', fontSize: '0.76em', marginTop: 2 }}>
+                                <span>← oldest</span>
+                                <span>{passRates[passRates.length - 1].toFixed(0)}% latest</span>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Diameter sparkline */}
+                        {diameters.length >= 2 && (
+                          <div>
+                            <div style={{ color: '#8b949e', marginBottom: 3 }}>Avg dot diameter (mm) — last {diameters.length} jobs</div>
+                            <div style={{ background: '#161b22', borderRadius: 5, padding: '6px 8px' }}>
+                              <Sparkline values={diameters} color={wearAlert ? '#e3b341' : '#58a6ff'} height={40} />
+                              <div style={{ display: 'flex', justifyContent: 'space-between', color: '#8b949e', fontSize: '0.76em', marginTop: 2 }}>
+                                <span>← oldest</span>
+                                <span>{diameters[diameters.length - 1].toFixed(3)} mm latest</span>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Per-job history table */}
+                        <details>
+                          <summary style={{ cursor: 'pointer', color: '#8b949e', fontSize: '0.8em' }}>Show job history ({jobs.length} entries)</summary>
+                          <div style={{ maxHeight: 160, overflowY: 'auto', marginTop: 6 }}>
+                            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.78em' }}>
+                              <thead>
+                                <tr style={{ color: '#8b949e', textAlign: 'left' }}>
+                                  <th style={{ padding: '2px 6px' }}>Date</th>
+                                  <th style={{ padding: '2px 6px' }}>Pass</th>
+                                  <th style={{ padding: '2px 6px' }}>Fail</th>
+                                  <th style={{ padding: '2px 6px' }}>Rate</th>
+                                  <th style={{ padding: '2px 6px' }}>Avg ⌀</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {[...jobs].reverse().map((j, i) => (
+                                  <tr key={i} style={{ borderTop: '1px solid #21262d' }}>
+                                    <td style={{ padding: '2px 6px', color: '#8b949e' }}>{j.date}</td>
+                                    <td style={{ padding: '2px 6px', color: '#3fb950' }}>{j.passed}</td>
+                                    <td style={{ padding: '2px 6px', color: j.failed > 0 ? '#f85149' : '#8b949e' }}>{j.failed}</td>
+                                    <td style={{ padding: '2px 6px', color: j.passRate >= 0.9 ? '#3fb950' : j.passRate >= 0.75 ? '#e3b341' : '#f85149', fontWeight: 600 }}>
+                                      {(j.passRate * 100).toFixed(0)}%
+                                    </td>
+                                    <td style={{ padding: '2px 6px', color: '#58a6ff' }}>
+                                      {j.avgDiameter != null ? `${j.avgDiameter.toFixed(3)}` : '—'}
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </details>
+
+                        <button
+                          className="btn secondary"
+                          style={{ fontSize: '0.78em', padding: '4px 0', marginTop: 2 }}
+                          onClick={async () => { if (await showConfirm('Clear all SPC data?')) { localStorage.removeItem(SPC_KEY); setSpcData({ jobs: [] }); } }}
+                        >🗑 Clear SPC Data</button>
+                      </>
+                    )}
+                  </div>
+                </details>
+              );
+            })()}
+
+            {/* Fine-Tune XY Correction UI disabled — fineTuneX and fineTuneY state removed */}
+            <div style={{ marginTop: 14 }}>
+              <PasteGauge
+                summary={pasteSummary}
+                nozzleDia={nozzleDia}
+                onNozzleDia={setNozzleDia}
+                onStockChange={(v) => { setPasteStock(v); }}
+                onRefill={(v) => { setPasteStock(v); }}
+              />
+            </div>
+
+            <MaintenanceManager
+              manager={nozzleMaintenance}
+              onPurge={purgeNozzle}
+              isPurging={isPurging}
+              spcJobs={spcData.jobs}
             />
           </div>
 
-          <MaintenanceManager
-            manager={nozzleMaintenance}
-            onPurge={purgeNozzle}
-            isPurging={isPurging}
-            spcJobs={spcData.jobs}
-          />
-        </div>
-
-        {/* Dispense Sequence Preview & Board Info */}
-        {(currentBoardSize || boardOutline) && (
-          <div className="box" style={{ marginTop: '12px' }}>
-            <div className="flex-row" style={{ justifyContent: 'space-between', marginBottom: '8px' }}>
-              <span><strong>PCB Size:</strong> {(currentBoardSize?.width || 0).toFixed(1)} x {(currentBoardSize?.height || 0).toFixed(1)}mm </span>
-              <span><strong>Total Paste Dots:</strong> {activeSequence.length}</span>
-            </div>
-
-            {activeSequence.length > 0 && (
-              <details>
-                <summary style={{ cursor: 'pointer', fontWeight: 'bold', color: '#0056b3' }}>
-                  👀 View Mathematical Volume Mapping & Timings
-                </summary>
-                <div style={{ maxHeight: '250px', overflowY: 'auto', marginTop: '8px', border: '1px solid #ddd' }}>
-                  <table className="kv small" style={{ width: '100%', textAlign: 'left', borderCollapse: 'collapse' }}>
-                    <thead style={{ position: 'sticky', top: 0, background: '#f8f9fa', zIndex: 1 }}>
-                      <tr>
-                        <th style={{ padding: '4px 8px', borderBottom: '1px solid #ccc' }}>#</th>
-                        <th style={{ padding: '4px 8px', borderBottom: '1px solid #ccc' }}>Shape</th>
-                        <th style={{ padding: '4px 8px', borderBottom: '1px solid #ccc' }}>Dimensions (mm)</th>
-                        <th style={{ padding: '4px 8px', borderBottom: '1px solid #ccc' }}>Exact Area (mm²)</th>
-                        <th style={{ padding: '4px 8px', borderBottom: '1px solid #ccc', color: '#d32f2f' }}>Dwell (ms)</th>
-                        <th style={{ padding: '4px 8px', borderBottom: '1px solid #ccc', color: '#00c49a' }}>Dots</th>
-                        <th style={{ padding: '4px 8px', borderBottom: '1px solid #ccc', color: '#00c49a' }}>Vol (µL)</th>
-                        <th style={{ padding: '4px 8px', borderBottom: '1px solid #ccc', color: '#ffa726' }}>PSI</th>
-                        <th style={{ padding: '4px 8px', borderBottom: '1px solid #ccc', color: '#ce93d8' }}>Mode</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {activeSequence.map((pad, idx) => {
-                        const area = dispensingSequencer.calculatePadArea(pad);
-                        const dwell = dispensingSequencer.calculateDwellTime(pad, { customDwellTime: baseDwellTime });
-                        const dm = dispensingSequencer.selectDispenseMode(pad, { beadAreaThreshold });
-                        return (
-                          <tr key={idx} style={{ borderBottom: '1px solid #eee' }}>
-                            <td style={{ padding: '4px 8px' }}>{idx + 1}</td>
-                            <td style={{ padding: '4px 8px' }}>{pad.isSubDot ? 'SubDot' : (pad.shape || 'Rect')}</td>
-                            <td style={{ padding: '4px 8px' }}>{(pad.width || 0).toFixed(2)} × {(pad.height || 0).toFixed(2)}</td>
-                            <td style={{ padding: '4px 8px' }}>{area.toFixed(3)}</td>
-                            <td style={{ padding: '4px 8px', fontWeight: 'bold', color: '#d32f2f' }}>{dwell}</td>
-                            <td style={{ padding: '4px 8px' }}>
-                              {pasteSummary?.perPad?.[idx]?.dots ?? '—'}
-                            </td>
-                            <td style={{ padding: '4px 8px', fontWeight: 'bold', color: '#00c49a' }}>
-                              {pasteSummary?.perPad?.[idx]?.volUl?.toFixed(3) ?? '—'}
-                            </td>
-                            <td style={{ padding: '4px 8px', color: '#ffa726' }}>
-                              {dispensingSequencer.calculatePadPressure(pad, { customPressure: localPressure })}
-                            </td>
-                            <td style={{ padding: '4px 8px', color: '#ce93d8', fontWeight: 'bold' }}>
-                              {dm.mode === 'bead' ? `bead-${dm.axis}` : 'dot'}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              </details>
-            )}
-          </div>
-        )}
-
-        {!refPoint && <div className="warning">⚠️ No Reference Point Selected</div>}
-
-        {applyXf && (
-          <div style={{ marginTop: 12, padding: '10px', background: '#ffebee', color: '#b71c1c', borderRadius: 4, fontSize: '0.86rem', display: 'flex', flexDirection: 'column', gap: 6, border: '1px solid #ffcdd2' }}>
-            <label style={{ fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
-              <input
-                type="checkbox"
-                checked={dynamicPanelCorrection}
-                onChange={e => setDynamicPanelCorrection(e.target.checked)}
-                style={{ width: 16, height: 16, cursor: 'pointer' }}
-              />
-              Dynamic Panel Auto-Correction (Recommended)
-            </label>
-            <span style={{ fontSize: '0.82rem', marginLeft: 22, opacity: 0.9 }}>
-              If enabled, the camera instantly re-solves the exact fiducials of each board inside the panel moments before dispensing it. This permanently fixes Y/X drift caused by warped or stretched FR4 panel margins!
-            </span>
-          </div>
-        )}
-
-        {/* ── Pad Alignment Preview ─────────────────────────── */}
-        {activeSequence.length > 0 && fiducials.some(f => f.design && f.machine) && (
-          <div style={{ marginTop: 14, padding: '12px', background: '#0d1117', border: '1px solid #30363d', borderRadius: 8 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-              <span style={{ fontWeight: 'bold', color: '#58a6ff', fontSize: '0.9em' }}>🔍 Pad Alignment Preview</span>
-              {calibCaptures.length > 0 && (
-                <span style={{ fontSize: '0.75em', color: '#3fb950', background: '#0d2a0d', border: '1px solid #3fb950', borderRadius: 4, padding: '2px 6px' }}>
-                  ✓ {calibCaptures.length} calibration point{calibCaptures.length > 1 ? 's' : ''} · correction: X{calibCorrection.x >= 0 ? '+' : ''}{calibCorrection.x.toFixed(3)} Y{calibCorrection.y >= 0 ? '+' : ''}{calibCorrection.y.toFixed(3)} mm
-                </span>
-              )}
-            </div>
-            <div style={{ fontSize: '0.78em', color: '#8b949e', marginBottom: 10 }}>
-              Move camera crosshair over each pad to verify alignment. Jog precisely onto a pad center, then click
-              <strong style={{ color: '#f0a500' }}> 📌 Capture True Center</strong> to measure &amp; correct systematic offset.
-            </div>
-
-            {calibCaptures.length > 0 && (
-              <div style={{ marginBottom: 10, padding: '6px 10px', background: '#161b22', borderRadius: 6, fontSize: '0.78em', border: '1px solid #3fb950' }}>
-                <div style={{ color: '#3fb950', fontWeight: 'bold', marginBottom: 4 }}>📐 Active Correction (applied to camera preview moves)</div>
-                <div style={{ color: '#e6edf3', fontFamily: 'monospace' }}>
-                  ΔX = <span style={{ color: '#56d364' }}>{calibCorrection.x >= 0 ? '+' : ''}{calibCorrection.x.toFixed(4)} mm</span>
-                  &nbsp;&nbsp;ΔY = <span style={{ color: '#56d364' }}>{calibCorrection.y >= 0 ? '+' : ''}{calibCorrection.y.toFixed(4)} mm</span>
-                  &nbsp;&nbsp;<span style={{ color: '#8b949e' }}>(avg of {calibCaptures.length} captures)</span>
-                </div>
-                <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
-                  {/* Apply-to-Dispensing button disabled — fineTuneX/Y state removed */}
-                  <button
-                    style={{ fontSize: '0.75em', padding: '3px 8px', background: '#3a1111', color: '#f85149', border: '1px solid #f85149', borderRadius: 4, cursor: 'pointer' }}
-                    onClick={() => setCalibCaptures([])}
-                  >✕ Clear Calibration Points</button>
-                </div>
-                {/* Fine-tune sync warning disabled — fineTuneX/Y state removed */}
-              </div>
-            )}
-
-            {(() => {
-              const pad = activeSequence[previewPadIdx];
-              if (!pad) return null;
-              const previewP = { ...pad };
-              const machineCoord = (applyXf && xf) ? applyTransform(xf, previewP) : null;
-              // Apply calibration correction to show the corrected target
-              const correctedCoord = machineCoord
-                ? { x: machineCoord.x + calibCorrection.x, y: machineCoord.y + calibCorrection.y }
-                : null;
-
-              const captureCurrentAsCenter = () => {
-                if (!machineCoord) return toast.warning('No predicted machine coordinate for this pad.');
-                if (!machinePosition || !isConnected) return toast.warning('Machine position unknown. Connect machine first.');
-                // delta = actual (current machine pos) - predicted
-                // So correction = actual - predicted
-                const deltaX = machinePosition.x - (machineCoord.x + calibCorrection.x);
-                const deltaY = machinePosition.y - (machineCoord.y + calibCorrection.y);
-                const newCapture = {
-                  padIdx: previewPadIdx,
-                  predicted: { x: machineCoord.x, y: machineCoord.y },
-                  actual: { x: machinePosition.x, y: machinePosition.y },
-                  delta: { x: deltaX + calibCorrection.x, y: deltaY + calibCorrection.y },
-                  timestamp: Date.now()
-                };
-                setCalibCaptures(prev => {
-                  // Replace any previous capture for this same pad index
-                  const filtered = prev.filter(c => c.padIdx !== previewPadIdx);
-                  return [...filtered, newCapture];
-                });
-                console.log(`[CalibCapture] Pad ${previewPadIdx + 1}: predicted=(${machineCoord.x.toFixed(3)},${machineCoord.y.toFixed(3)}) actual=(${machinePosition.x.toFixed(3)},${machinePosition.y.toFixed(3)}) correction=(${newCapture.delta.x.toFixed(3)},${newCapture.delta.y.toFixed(3)})`);
-              };
-
-              return (
-                <>
-                  <div style={{ background: '#161b22', borderRadius: 6, padding: '8px 12px', marginBottom: 10, fontFamily: 'monospace', fontSize: '0.82em' }}>
-                    <div style={{ color: '#8b949e', marginBottom: 4 }}>Pad {previewPadIdx + 1} / {activeSequence.length}</div>
-                    <div>Design: X<span style={{ color: '#79c0ff' }}>{pad.x.toFixed(3)}</span> Y<span style={{ color: '#79c0ff' }}>{pad.y.toFixed(3)}</span> mm</div>
-                    {machineCoord ? (
-                      <div style={{ marginTop: 4 }}>
-                        <div>Predicted: X<span style={{ color: '#56d364' }}>{machineCoord.x.toFixed(3)}</span> Y<span style={{ color: '#56d364' }}>{machineCoord.y.toFixed(3)}</span> mm</div>
-                        {calibCaptures.length > 0 && (
-                          <div style={{ color: '#f0a500' }}>Corrected: X<span style={{ color: '#f0a500' }}>{correctedCoord.x.toFixed(3)}</span> Y<span style={{ color: '#f0a500' }}>{correctedCoord.y.toFixed(3)}</span> mm</div>
-                        )}
-                        <div style={{ color: '#6e7681', marginTop: 2 }}>Current machine: X{machinePosition.x.toFixed(3)} Y{machinePosition.y.toFixed(3)}</div>
-                      </div>
-                    ) : (
-                      <div style={{ color: '#f85149', marginTop: 4 }}>⚠ No transform / fiducials available</div>
-                    )}
-                  </div>
-
-                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginBottom: 6 }}>
-                    <button
-                      className="btn secondary" style={{ flex: 1, minWidth: 60 }}
-                      disabled={previewPadIdx <= 0}
-                      onClick={() => setPreviewPadIdx(i => i - 1)}
-                    >◀ Prev</button>
-
-                    <button
-                      className="btn"
-                      style={{ flex: 2, background: machineCoord ? '#1f6feb' : '#444', minWidth: 80 }}
-                      disabled={!machineCoord || !isConnected}
-                      onClick={() => correctedCoord && moveCameraToMachineCoord(machineCoord.x, machineCoord.y)}
-                    >📷 Move Camera Here</button>
-
-                    <button
-                      className="btn secondary" style={{ flex: 1, minWidth: 60 }}
-                      disabled={previewPadIdx >= activeSequence.length - 1}
-                      onClick={() => setPreviewPadIdx(i => i + 1)}
-                    >Next ▶</button>
-                  </div>
-
-                  {/* Live Calibration Capture */}
-                  <div style={{ borderTop: '1px solid #21262d', paddingTop: 8, marginTop: 4 }}>
-                    <div style={{ fontSize: '0.75em', color: '#8b949e', marginBottom: 6 }}>
-                      <strong style={{ color: '#f0a500' }}>📌 Calibration:</strong> Click "Move Camera Here", then jog the machine until the crosshair is <em>exactly</em> on the pad center, then capture.
-                    </div>
-                    <div style={{ display: 'flex', gap: 8 }}>
-                      <button
-                        className="btn"
-                        style={{ flex: 1, background: isConnected && machineCoord ? '#4a3000' : '#333', border: '1px solid #f0a500', color: '#f0a500', fontWeight: 'bold' }}
-                        disabled={!isConnected || !machineCoord}
-                        onClick={captureCurrentAsCenter}
-                        title="Record current machine position as true center of this pad. Computes systematic offset correction."
-                      >📌 Capture True Center</button>
-                    </div>
-                    {calibCaptures.find(c => c.padIdx === previewPadIdx) && (
-                      <div style={{ marginTop: 6, fontSize: '0.75em', color: '#3fb950', fontFamily: 'monospace' }}>
-                        ✓ This pad captured: correction applied (ΔX={calibCaptures.find(c => c.padIdx === previewPadIdx).delta.x.toFixed(3)}, ΔY={calibCaptures.find(c => c.padIdx === previewPadIdx).delta.y.toFixed(3)} mm)
-                      </div>
-                    )}
-                  </div>
-                </>
-              );
-            })()}
-          </div>
-        )}
-
-        {/* Flow UI */}
-        <div className="flow-container">
-          <div className="flow-header">
-            <div className={`stage-indicator ${jobStage !== 'idle' ? 'active' : 'idle'}`}>
-              <strong>Status:</strong> {jobStage.toUpperCase()}
-              {machineStatus === 'busy' && ' (Busy)'}
-              {panelBoards && panelBoards.length > 1 && jobStage === 'dispensing' && (
-                <span style={{ marginLeft: 8, color: '#58a6ff', fontSize: '0.82em', fontFamily: 'monospace' }}>
-                  Board {currentBoardIdx + 1}/{panelBoards.length}
-                </span>
-              )}
-            </div>
-            <div className="pos-readout">
-              Pos: {machinePosition.x.toFixed(3)}, {machinePosition.y.toFixed(3)}, {machinePosition.z.toFixed(3)}
-            </div>
-          </div>
-
-          {/* STAGE: IDLE */}
-          {jobStage === 'idle' && (
-            <div className="section">
-              <h3>Processing Control</h3>
-
-
-              {resumeFromPad > 0 && (
-                <div style={{ marginBottom: 10, padding: '8px 12px', background: 'rgba(56,139,253,0.1)', border: '1px solid #388bfd', borderRadius: 6, fontSize: '0.83em' }}>
-                  <div style={{ color: '#79c0ff', fontWeight: 600, marginBottom: 6 }}>
-                    ↩ Job interrupted at pad {resumeFromPad} of {activeSequence.length * (panelBoards?.length || 1)}
-                  </div>
-                  <div style={{ display: 'flex', gap: 6 }}>
-                    <button
-                      className="btn primary"
-                      style={{ flex: 1, fontSize: '0.85em' }}
-                      disabled={!isConnected}
-                      onClick={() => directResume()}
-                    >
-                      Resume from pad {resumeFromPad + 1}
-                    </button>
-                    <button
-                      className="btn secondary"
-                      style={{ fontSize: '0.85em' }}
-                      onClick={() => { localStorage.removeItem('resumeFromPad'); setResumeFromPad(0); }}
-                    >
-                      Start Fresh
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              <div className="row">
-                <button
-                  className={`btn ${isJobRunning ? 'danger' : 'primary'}`}
-                  onClick={isJobRunning ? cancelJob : () => { if (resumeFromPad > 0) { localStorage.removeItem('resumeFromPad'); setResumeFromPad(0); } startJobFlow(); }}
-                  disabled={!isConnected && !isJobRunning}
-                >
-                  {isJobRunning ? '⏹ ABORT JOB' : resumeFromPad > 0 ? '▶ Start From Beginning' : '▶ START JOB'}
-                </button>
-
-                <button
-                  className="btn secondary"
-                  onClick={handleDownloadGCode}
-                  disabled={isJobRunning}
-                >
-                  💾 Download G-Code
-                </button>
+          {/* Dispense Sequence Preview & Board Info */}
+          {(currentBoardSize || boardOutline) && (
+            <div className="box" style={{ marginTop: '12px' }}>
+              <div className="flex-row" style={{ justifyContent: 'space-between', marginBottom: '8px' }}>
+                <span><strong>PCB Size:</strong> {(currentBoardSize?.width || 0).toFixed(1)} x {(currentBoardSize?.height || 0).toFixed(1)}mm </span>
+                <span><strong>Total Paste Dots:</strong> {activeSequence.length}</span>
               </div>
 
-              {jobMode === 'batch' && <p>Batch mode not supported in new flow yet</p>}
+              {activeSequence.length > 0 && (
+                <details>
+                  <summary style={{ cursor: 'pointer', fontWeight: 'bold', color: '#0056b3' }}>
+                    👀 View Mathematical Volume Mapping & Timings
+                  </summary>
+                  <div style={{ maxHeight: '250px', overflowY: 'auto', marginTop: '8px', border: '1px solid #ddd' }}>
+                    <table className="kv small" style={{ width: '100%', textAlign: 'left', borderCollapse: 'collapse' }}>
+                      <thead style={{ position: 'sticky', top: 0, background: '#f8f9fa', zIndex: 1 }}>
+                        <tr>
+                          <th style={{ padding: '4px 8px', borderBottom: '1px solid #ccc' }}>#</th>
+                          <th style={{ padding: '4px 8px', borderBottom: '1px solid #ccc' }}>Shape</th>
+                          <th style={{ padding: '4px 8px', borderBottom: '1px solid #ccc' }}>Dimensions (mm)</th>
+                          <th style={{ padding: '4px 8px', borderBottom: '1px solid #ccc' }}>Exact Area (mm²)</th>
+                          <th style={{ padding: '4px 8px', borderBottom: '1px solid #ccc', color: '#d32f2f' }}>Dwell (ms)</th>
+                          <th style={{ padding: '4px 8px', borderBottom: '1px solid #ccc', color: '#00c49a' }}>Dots</th>
+                          <th style={{ padding: '4px 8px', borderBottom: '1px solid #ccc', color: '#00c49a' }}>Vol (µL)</th>
+                          <th style={{ padding: '4px 8px', borderBottom: '1px solid #ccc', color: '#ffa726' }}>PSI</th>
+                          <th style={{ padding: '4px 8px', borderBottom: '1px solid #ccc', color: '#ce93d8' }}>Mode</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {activeSequence.map((pad, idx) => {
+                          const area = dispensingSequencer.calculatePadArea(pad);
+                          const dwell = dispensingSequencer.calculateDwellTime(pad, { customDwellTime: baseDwellTime });
+                          const dm = dispensingSequencer.selectDispenseMode(pad, { beadAreaThreshold });
+                          return (
+                            <tr key={idx} style={{ borderBottom: '1px solid #eee' }}>
+                              <td style={{ padding: '4px 8px' }}>{idx + 1}</td>
+                              <td style={{ padding: '4px 8px' }}>{pad.isSubDot ? 'SubDot' : (pad.shape || 'Rect')}</td>
+                              <td style={{ padding: '4px 8px' }}>{(pad.width || 0).toFixed(2)} × {(pad.height || 0).toFixed(2)}</td>
+                              <td style={{ padding: '4px 8px' }}>{area.toFixed(3)}</td>
+                              <td style={{ padding: '4px 8px', fontWeight: 'bold', color: '#d32f2f' }}>{dwell}</td>
+                              <td style={{ padding: '4px 8px' }}>
+                                {pasteSummary?.perPad?.[idx]?.dots ?? '—'}
+                              </td>
+                              <td style={{ padding: '4px 8px', fontWeight: 'bold', color: '#00c49a' }}>
+                                {pasteSummary?.perPad?.[idx]?.volUl?.toFixed(3) ?? '—'}
+                              </td>
+                              <td style={{ padding: '4px 8px', color: '#ffa726' }}>
+                                {dispensingSequencer.calculatePadPressure(pad, { customPressure: localPressure })}
+                              </td>
+                              <td style={{ padding: '4px 8px', color: '#ce93d8', fontWeight: 'bold' }}>
+                                {dm.mode === 'bead' ? `bead-${dm.axis}` : 'dot'}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </details>
+              )}
             </div>
           )}
 
-          {/* STAGE: PREFLIGHT */}
-          {jobStage === 'preflight' && (() => {
-            const checks = computePreflightChecks();
-            const criticalFailed = checks.some(c => c.critical && !c.passed);
-            return (
-              <div className="stage-box">
-                <h4>Pre-flight Checklist</h4>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 14 }}>
-                  {checks.map(c => {
-                    const icon = c.passed ? '✓' : c.critical ? '✗' : '⚠';
-                    const color = c.passed ? '#3fb950' : c.critical ? '#f85149' : '#e3b341';
-                    return (
-                      <div key={c.id} style={{ display: 'flex', gap: 8, alignItems: 'flex-start', padding: '6px 8px', background: 'rgba(255,255,255,0.03)', borderRadius: 5, border: `1px solid ${color}22` }}>
-                        <span style={{ color, fontWeight: 700, fontSize: '1em', minWidth: 16, marginTop: 1 }}>{icon}</span>
-                        <div>
-                          <div style={{ color: c.passed ? '#e6edf3' : color, fontWeight: 500, fontSize: '0.85em' }}>{c.label}</div>
-                          <div style={{ color: '#8b949e', fontSize: '0.76em', marginTop: 1 }}>{c.detail}</div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-                {criticalFailed && (
-                  <div style={{ marginBottom: 10, padding: '6px 10px', background: 'rgba(220,50,50,0.1)', border: '1px solid #f85149', borderRadius: 5, fontSize: '0.8em', color: '#f85149' }}>
-                    Fix the items marked ✗ before proceeding.
-                  </div>
-                )}
-                <div style={{ display: 'flex', gap: 8 }}>
-                  <button className="btn secondary full-width" onClick={() => setJobStage('idle')}>Cancel</button>
-                  <button
-                    className="btn primary full-width"
-                    disabled={criticalFailed}
-                    onClick={proceedFromPreflight}
-                  >
-                    {criticalFailed ? 'Fix Issues First' : 'Proceed ▶'}
-                  </button>
-                </div>
-              </div>
-            );
-          })()}
+          {!refPoint && <div className="warning">⚠️ No Reference Point Selected</div>}
 
-          {/* STAGE: HOMING */}
-          {jobStage === 'homing' && (
-            <div className="stage-box">
-              <h4>Homing Machine...</h4>
-              <div className="spinner"></div>
-            </div>
-          )}
-
-          {/* STAGE: PURGING */}
-          {jobStage === 'purging' && (
-            <div className="stage-box">
-              <h4>Purging Nozzle...</h4>
-              <p style={{ color: '#8b949e', fontSize: '0.85em' }}>
-                Priming nozzle for {(purgeDurationMs / 1000).toFixed(1)}s at {localPressure} PSI before first pad.
-              </p>
-              <div className="spinner"></div>
-              <button className="btn danger full-width" style={{ marginTop: 10 }} onClick={cancelJob}>STOP</button>
-            </div>
-          )}
-
-          {/* STAGE: LOADING */}
-          {jobStage === 'loading' && (
-            <div className="stage-box">
-              <h4>Load PCB</h4>
-              <p style={{ color: '#8b949e', fontSize: '0.85em', marginBottom: 10 }}>
-                Place and secure the PCB on the bed, then verify it is present before proceeding.
-              </p>
-
-              {/* Camera board-presence check */}
-              <button
-                className="btn secondary full-width"
-                style={{ marginBottom: 8 }}
-                disabled={boardCheckBusy}
-                onClick={async () => {
-                  setBoardCheckBusy(true);
-                  setBoardCheckResult(null);
-                  try {
-                    const r = await fetch('http://localhost:8000/api/check_board_present');
-                    if (r.ok) {
-                      const d = await r.json();
-                      setBoardCheckResult(d);
-                      if (d.present) setBoardConfirmed(true);
-                    } else {
-                      setBoardCheckResult({ present: null, reason: 'Vision server error — check manually.' });
-                    }
-                  } catch {
-                    setBoardCheckResult({ present: null, reason: 'Vision server offline — confirm manually below.' });
-                  } finally {
-                    setBoardCheckBusy(false);
-                  }
-                }}
-              >
-                {boardCheckBusy ? 'Checking…' : '📷 Check Board Present'}
-              </button>
-
-              {boardCheckResult && (
-                <div style={{
-                  marginBottom: 10, padding: '6px 10px', borderRadius: 5, fontSize: '0.82em',
-                  background: boardCheckResult.present === true ? 'rgba(0,180,100,0.12)' : boardCheckResult.present === false ? 'rgba(220,50,50,0.1)' : 'rgba(227,179,65,0.12)',
-                  border: `1px solid ${boardCheckResult.present === true ? '#2da44e' : boardCheckResult.present === false ? '#f85149' : '#e3b341'}`,
-                  color: boardCheckResult.present === true ? '#3fb950' : boardCheckResult.present === false ? '#f85149' : '#e3b341',
-                }}>
-                  {boardCheckResult.present === true && '✓ '}
-                  {boardCheckResult.present === false && '✗ '}
-                  {boardCheckResult.present === null && '⚠ '}
-                  {boardCheckResult.reason}
-                  {boardCheckResult.confidence != null && ` (${Math.round(boardCheckResult.confidence * 100)}% confidence)`}
-                </div>
-              )}
-
-              {/* Manual override confirmation */}
-              <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: '0.85em', marginBottom: 12 }}>
+          {applyXf && (
+            <div style={{ marginTop: 12, padding: '10px', background: '#ffebee', color: '#b71c1c', borderRadius: 4, fontSize: '0.86rem', display: 'flex', flexDirection: 'column', gap: 6, border: '1px solid #ffcdd2' }}>
+              <label style={{ fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
                 <input
                   type="checkbox"
-                  checked={boardConfirmed}
-                  onChange={e => setBoardConfirmed(e.target.checked)}
-                  style={{ width: 'auto' }}
+                  checked={dynamicPanelCorrection}
+                  onChange={e => setDynamicPanelCorrection(e.target.checked)}
+                  style={{ width: 16, height: 16, cursor: 'pointer' }}
                 />
-                PCB is loaded and secured on the bed
+                Dynamic Panel Auto-Correction (Recommended)
               </label>
-
-              <button
-                className="btn primary lg full-width"
-                disabled={!boardConfirmed}
-                onClick={proceedToRegistration}
-              >
-                {boardConfirmed ? 'Next: Start Job ▶' : 'Confirm board loaded first'}
-              </button>
+              <span style={{ fontSize: '0.82rem', marginLeft: 22, opacity: 0.9 }}>
+                If enabled, the camera instantly re-solves the exact fiducials of each board inside the panel moments before dispensing it. This permanently fixes Y/X drift caused by warped or stretched FR4 panel margins!
+              </span>
             </div>
           )}
 
-          {/* STAGE: PROBING */}
-          {jobStage === 'probing' && (
-            <div className="stage-box">
-              <h4>Probing PCB Surface...</h4>
-              <p style={{ color: '#8b949e', fontSize: '0.85em' }}>
-                Sending <code>G38.2 Z-30 F50</code> — machine lowers slowly until probe contact, then sets Z=0 at PCB surface.
-              </p>
-              {probeResult === null && <div className="spinner"></div>}
-              {probeResult === 'contact' && (
-                <div style={{ marginTop: 8, padding: '6px 10px', background: 'rgba(0,180,100,0.12)', border: '1px solid #2da44e', borderRadius: 5, color: '#3fb950', fontSize: '0.85em', fontFamily: 'monospace' }}>
-                  ✓ Contact at Z={probedSurfaceZRef.current?.toFixed(3)} mm — G92 Z0 applied
-                </div>
-              )}
-              {probeResult === 'no-contact' && (
-                <div style={{ marginTop: 8, padding: '6px 10px', background: 'rgba(220,50,50,0.1)', border: '1px solid #f85149', borderRadius: 5, color: '#f85149', fontSize: '0.82em' }}>
-                  ⚠ No probe contact detected — continuing with current Z (no G92 Z0 applied). Check probe wiring or disable surface probe in settings.
-                </div>
-              )}
-              <button className="btn danger full-width" style={{ marginTop: 10 }} onClick={cancelJob}>STOP</button>
-            </div>
-          )}
-
-          {/* STAGE: AUTO-ALIGNING */}
-          {jobStage === 'auto-aligning' && (
-            <div className="stage-box">
-              <h4>Vision Alignment</h4>
-              <p>Camera is precisely scanning fiducials to eliminate stretch/rotation errors...</p>
-              <div className="spinner"></div>
-            </div>
-          )}
-
-          {/* STAGE: DISPENSING */}
-          {jobStage === 'dispensing' && (
-            <div className="stage-box">
-              <h4>Dispensing...</h4>
-              {panelBoards && panelBoards.length > 1 && (
-                <div style={{ marginBottom: 6, padding: '4px 10px', background: '#0d1117', border: '1px solid #30363d', borderRadius: 5, fontFamily: 'monospace', fontSize: '0.82em', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ color: '#8b949e' }}>Board</span>
-                  <span style={{ color: '#58a6ff', fontWeight: 700 }}>
-                    {currentBoardIdx + 1} / {panelBoards.length}
-                    {panelBoards[currentBoardIdx]?.name ? ` — ${panelBoards[currentBoardIdx].name}` : ''}
+          {/* ── Pad Alignment Preview ─────────────────────────── */}
+          {activeSequence.length > 0 && fiducials.some(f => f.design && f.machine) && (
+            <div style={{ marginTop: 14, padding: '12px', background: '#0d1117', border: '1px solid #30363d', borderRadius: 8 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                <span style={{ fontWeight: 'bold', color: '#58a6ff', fontSize: '0.9em' }}>🔍 Pad Alignment Preview</span>
+                {calibCaptures.length > 0 && (
+                  <span style={{ fontSize: '0.75em', color: '#3fb950', background: '#0d2a0d', border: '1px solid #3fb950', borderRadius: 4, padding: '2px 6px' }}>
+                    ✓ {calibCaptures.length} calibration point{calibCaptures.length > 1 ? 's' : ''} · correction: X{calibCorrection.x >= 0 ? '+' : ''}{calibCorrection.x.toFixed(3)} Y{calibCorrection.y >= 0 ? '+' : ''}{calibCorrection.y.toFixed(3)} mm
                   </span>
-                </div>
-              )}
-              <progress value={jobProgress.current} max={jobProgress.total}></progress>
-              <p>{jobProgress.current} / {jobProgress.total}</p>
-              {currentPadInfo && (
-                <div style={{ marginTop: 10, padding: '8px 12px', background: '#0d1117', border: '1px solid #30363d', borderRadius: 6, fontFamily: 'monospace', fontSize: '0.82em', display: 'flex', gap: 16, flexWrap: 'wrap' }}>
-                  <span style={{ color: '#ce93d8' }}>{currentPadInfo.mode === 'bead' ? '〰 bead' : '● dot'}</span>
-                  <span style={{ color: '#ffa726' }}>⊕ {currentPadInfo.pressure} PSI</span>
-                  {currentPadInfo.mode !== 'bead' && <span style={{ color: '#d32f2f' }}>⏱ {currentPadInfo.dwellMs} ms</span>}
-                  <span style={{ color: '#00c49a' }}>💧 {currentPadInfo.volumeUl} µL</span>
-                </div>
-              )}
-              {enableDotVerification && dotCheckResults.length > 0 && (() => {
-                const last = dotCheckResults[dotCheckResults.length - 1];
-                const failed = dotCheckResults.filter(r => !r.passed).length;
-                return (
-                  <div style={{ marginTop: 6, padding: '6px 10px', background: last.passed ? 'rgba(0,180,100,0.12)' : 'rgba(220,50,50,0.15)', border: `1px solid ${last.passed ? '#2da44e' : '#f85149'}`, borderRadius: 5, fontFamily: 'monospace', fontSize: '0.80em' }}>
-                    <span style={{ color: last.passed ? '#3fb950' : '#f85149', fontWeight: 600 }}>
-                      {last.passed ? '✓ Dot OK' : '✗ Dot MISSING'} — pad #{last.padIndex}
-                      {last.passed && last.diameter_mm > 0 ? ` (∅${last.diameter_mm}mm)` : ''}
-                    </span>
-                    {failed > 0 && <span style={{ color: '#f85149', marginLeft: 12 }}>{failed} failed so far</span>}
+                )}
+              </div>
+              <div style={{ fontSize: '0.78em', color: '#8b949e', marginBottom: 10 }}>
+                Move camera crosshair over each pad to verify alignment. Jog precisely onto a pad center, then click
+                <strong style={{ color: '#f0a500' }}> 📌 Capture True Center</strong> to measure &amp; correct systematic offset.
+              </div>
+
+              {calibCaptures.length > 0 && (
+                <div style={{ marginBottom: 10, padding: '6px 10px', background: '#161b22', borderRadius: 6, fontSize: '0.78em', border: '1px solid #3fb950' }}>
+                  <div style={{ color: '#3fb950', fontWeight: 'bold', marginBottom: 4 }}>📐 Active Correction (applied to camera preview moves)</div>
+                  <div style={{ color: '#e6edf3', fontFamily: 'monospace' }}>
+                    ΔX = <span style={{ color: '#56d364' }}>{calibCorrection.x >= 0 ? '+' : ''}{calibCorrection.x.toFixed(4)} mm</span>
+                    &nbsp;&nbsp;ΔY = <span style={{ color: '#56d364' }}>{calibCorrection.y >= 0 ? '+' : ''}{calibCorrection.y.toFixed(4)} mm</span>
+                    &nbsp;&nbsp;<span style={{ color: '#8b949e' }}>(avg of {calibCaptures.length} captures)</span>
                   </div>
+                  <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
+                    {/* Apply-to-Dispensing button disabled — fineTuneX/Y state removed */}
+                    <button
+                      style={{ fontSize: '0.75em', padding: '3px 8px', background: '#3a1111', color: '#f85149', border: '1px solid #f85149', borderRadius: 4, cursor: 'pointer' }}
+                      onClick={() => setCalibCaptures([])}
+                    >✕ Clear Calibration Points</button>
+                  </div>
+                  {/* Fine-tune sync warning disabled — fineTuneX/Y state removed */}
+                </div>
+              )}
+
+              {(() => {
+                const pad = activeSequence[previewPadIdx];
+                if (!pad) return null;
+                const previewP = { ...pad };
+                const machineCoord = (applyXf && xf) ? applyTransform(xf, previewP) : null;
+                // Apply calibration correction to show the corrected target
+                const correctedCoord = machineCoord
+                  ? { x: machineCoord.x + calibCorrection.x, y: machineCoord.y + calibCorrection.y }
+                  : null;
+
+                const captureCurrentAsCenter = () => {
+                  if (!machineCoord) return toast.warning('No predicted machine coordinate for this pad.');
+                  if (!machinePosition || !isConnected) return toast.warning('Machine position unknown. Connect machine first.');
+                  // delta = actual (current machine pos) - predicted
+                  // So correction = actual - predicted
+                  const deltaX = machinePosition.x - (machineCoord.x + calibCorrection.x);
+                  const deltaY = machinePosition.y - (machineCoord.y + calibCorrection.y);
+                  const newCapture = {
+                    padIdx: previewPadIdx,
+                    predicted: { x: machineCoord.x, y: machineCoord.y },
+                    actual: { x: machinePosition.x, y: machinePosition.y },
+                    delta: { x: deltaX + calibCorrection.x, y: deltaY + calibCorrection.y },
+                    timestamp: Date.now()
+                  };
+                  setCalibCaptures(prev => {
+                    // Replace any previous capture for this same pad index
+                    const filtered = prev.filter(c => c.padIdx !== previewPadIdx);
+                    return [...filtered, newCapture];
+                  });
+                  console.log(`[CalibCapture] Pad ${previewPadIdx + 1}: predicted=(${machineCoord.x.toFixed(3)},${machineCoord.y.toFixed(3)}) actual=(${machinePosition.x.toFixed(3)},${machinePosition.y.toFixed(3)}) correction=(${newCapture.delta.x.toFixed(3)},${newCapture.delta.y.toFixed(3)})`);
+                };
+
+                return (
+                  <>
+                    <div style={{ background: '#161b22', borderRadius: 6, padding: '8px 12px', marginBottom: 10, fontFamily: 'monospace', fontSize: '0.82em' }}>
+                      <div style={{ color: '#8b949e', marginBottom: 4 }}>Pad {previewPadIdx + 1} / {activeSequence.length}</div>
+                      <div>Design: X<span style={{ color: '#79c0ff' }}>{pad.x.toFixed(3)}</span> Y<span style={{ color: '#79c0ff' }}>{pad.y.toFixed(3)}</span> mm</div>
+                      {machineCoord ? (
+                        <div style={{ marginTop: 4 }}>
+                          <div>Predicted: X<span style={{ color: '#56d364' }}>{machineCoord.x.toFixed(3)}</span> Y<span style={{ color: '#56d364' }}>{machineCoord.y.toFixed(3)}</span> mm</div>
+                          {calibCaptures.length > 0 && (
+                            <div style={{ color: '#f0a500' }}>Corrected: X<span style={{ color: '#f0a500' }}>{correctedCoord.x.toFixed(3)}</span> Y<span style={{ color: '#f0a500' }}>{correctedCoord.y.toFixed(3)}</span> mm</div>
+                          )}
+                          <div style={{ color: '#6e7681', marginTop: 2 }}>Current machine: X{machinePosition.x.toFixed(3)} Y{machinePosition.y.toFixed(3)}</div>
+                        </div>
+                      ) : (
+                        <div style={{ color: '#f85149', marginTop: 4 }}>⚠ No transform / fiducials available</div>
+                      )}
+                    </div>
+
+                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginBottom: 6 }}>
+                      <button
+                        className="btn secondary" style={{ flex: 1, minWidth: 60 }}
+                        disabled={previewPadIdx <= 0}
+                        onClick={() => setPreviewPadIdx(i => i - 1)}
+                      >◀ Prev</button>
+
+                      <button
+                        className="btn"
+                        style={{ flex: 2, background: machineCoord ? '#1f6feb' : '#444', minWidth: 80 }}
+                        disabled={!machineCoord || !isConnected}
+                        onClick={() => correctedCoord && moveCameraToMachineCoord(machineCoord.x, machineCoord.y)}
+                      >📷 Move Camera Here</button>
+
+                      <button
+                        className="btn secondary" style={{ flex: 1, minWidth: 60 }}
+                        disabled={previewPadIdx >= activeSequence.length - 1}
+                        onClick={() => setPreviewPadIdx(i => i + 1)}
+                      >Next ▶</button>
+                    </div>
+
+                    {/* Live Calibration Capture */}
+                    <div style={{ borderTop: '1px solid #21262d', paddingTop: 8, marginTop: 4 }}>
+                      <div style={{ fontSize: '0.75em', color: '#8b949e', marginBottom: 6 }}>
+                        <strong style={{ color: '#f0a500' }}>📌 Calibration:</strong> Click "Move Camera Here", then jog the machine until the crosshair is <em>exactly</em> on the pad center, then capture.
+                      </div>
+                      <div style={{ display: 'flex', gap: 8 }}>
+                        <button
+                          className="btn"
+                          style={{ flex: 1, background: isConnected && machineCoord ? '#4a3000' : '#333', border: '1px solid #f0a500', color: '#f0a500', fontWeight: 'bold' }}
+                          disabled={!isConnected || !machineCoord}
+                          onClick={captureCurrentAsCenter}
+                          title="Record current machine position as true center of this pad. Computes systematic offset correction."
+                        >📌 Capture True Center</button>
+                      </div>
+                      {calibCaptures.find(c => c.padIdx === previewPadIdx) && (
+                        <div style={{ marginTop: 6, fontSize: '0.75em', color: '#3fb950', fontFamily: 'monospace' }}>
+                          ✓ This pad captured: correction applied (ΔX={calibCaptures.find(c => c.padIdx === previewPadIdx).delta.x.toFixed(3)}, ΔY={calibCaptures.find(c => c.padIdx === previewPadIdx).delta.y.toFixed(3)} mm)
+                        </div>
+                      )}
+                    </div>
+                  </>
                 );
               })()}
-              <button className="btn danger full-width" onClick={cancelJob}>STOP</button>
             </div>
           )}
 
-          {/* STAGE: FINISHED */}
-          {jobStage === 'finished' && (
-            <div className="stage-box">
-              <h4>Job Complete!</h4>
-              {jobReport && (
-                <table style={{ width: '100%', fontSize: '0.85em', marginBottom: 10, borderCollapse: 'collapse' }}>
-                  <tbody>
-                    <tr><td style={{ color: '#8b949e', padding: '2px 6px' }}>Pads dispensed</td><td style={{ color: '#e6edf3', textAlign: 'right' }}>{jobReport.totalPads}</td></tr>
-                    <tr><td style={{ color: '#8b949e', padding: '2px 6px' }}>Total paste used</td><td style={{ color: '#00c49a', textAlign: 'right' }}>{jobReport.totalVolUl} µL</td></tr>
-                    <tr><td style={{ color: '#8b949e', padding: '2px 6px' }}>Duration</td><td style={{ color: '#e6edf3', textAlign: 'right' }}>{jobReport.jobDurationSec} s</td></tr>
-                    <tr><td style={{ color: '#8b949e', padding: '2px 6px' }}>Avg dwell</td><td style={{ color: '#d32f2f', textAlign: 'right' }}>{jobReport.avgDwellMs} ms</td></tr>
-                    <tr><td style={{ color: '#8b949e', padding: '2px 6px' }}>Base pressure</td><td style={{ color: '#ffa726', textAlign: 'right' }}>{jobReport.basePressure} PSI</td></tr>
-                    {enableSurfaceProbe && (
-                      <tr>
-                        <td style={{ color: '#8b949e', padding: '2px 6px' }}>PCB surface (Z probe)</td>
-                        <td style={{ textAlign: 'right', fontFamily: 'monospace', color: jobReport.probedSurfaceZ != null ? '#58a6ff' : '#e3b341' }}>
-                          {jobReport.probedSurfaceZ != null ? `${jobReport.probedSurfaceZ.toFixed(3)} mm` : '⚠ no contact'}
-                        </td>
-                      </tr>
-                    )}
-                    {jobReport.dotsChecked != null && (
-                      <tr>
-                        <td style={{ color: '#8b949e', padding: '2px 6px' }}>Dot verification</td>
-                        <td style={{ textAlign: 'right', color: jobReport.dotsFailed === 0 ? '#3fb950' : '#f85149', fontWeight: 600 }}>
-                          {jobReport.dotsFailed === 0
-                            ? `✓ All ${jobReport.dotsChecked} passed`
-                            : `✗ ${jobReport.dotsFailed} / ${jobReport.dotsChecked} failed`}
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              )}
-              {jobReport?.dotsFailed > 0 && dotCheckResults.length > 0 && (
-                <div style={{ marginBottom: 10, padding: '6px 10px', background: 'rgba(220,50,50,0.1)', border: '1px solid #f85149', borderRadius: 5, fontSize: '0.78em', fontFamily: 'monospace' }}>
-                  <div style={{ color: '#f85149', fontWeight: 600, marginBottom: 4 }}>Failed pads:</div>
-                  {dotCheckResults.filter(r => !r.passed).map(r => (
-                    <div key={r.padIndex} style={{ color: '#e6edf3' }}>Pad #{r.padIndex}</div>
-                  ))}
-                </div>
-              )}
-              <div style={{ fontSize: '0.75em', color: '#8b949e', marginBottom: 8, fontFamily: 'monospace', wordBreak: 'break-all' }}>
-                Log saved to: Documents/SolderPasteJobLogs/
+          {/* Flow UI */}
+          <div className="flow-container">
+            <div className="flow-header">
+              <div className={`stage-indicator ${jobStage !== 'idle' ? 'active' : 'idle'}`}>
+                <strong>Status:</strong> {jobStage.toUpperCase()}
+                {machineStatus === 'busy' && ' (Busy)'}
+                {panelBoards && panelBoards.length > 1 && jobStage === 'dispensing' && (
+                  <span style={{ marginLeft: 8, color: '#58a6ff', fontSize: '0.82em', fontFamily: 'monospace' }}>
+                    Board {currentBoardIdx + 1}/{panelBoards.length}
+                  </span>
+                )}
               </div>
-              <button className="btn full-width" onClick={() => setJobStage('idle')}>Done</button>
+              <div className="pos-readout">
+                Pos: {machinePosition.x.toFixed(3)}, {machinePosition.y.toFixed(3)}, {machinePosition.z.toFixed(3)}
+              </div>
             </div>
-          )}
+
+            {/* STAGE: IDLE */}
+            {jobStage === 'idle' && (
+              <div className="section">
+                <h3>Processing Control</h3>
+
+
+                {resumeFromPad > 0 && (
+                  <div style={{ marginBottom: 10, padding: '8px 12px', background: 'rgba(56,139,253,0.1)', border: '1px solid #388bfd', borderRadius: 6, fontSize: '0.83em' }}>
+                    <div style={{ color: '#79c0ff', fontWeight: 600, marginBottom: 6 }}>
+                      ↩ Job interrupted at pad {resumeFromPad} of {activeSequence.length * (panelBoards?.length || 1)}
+                    </div>
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      <button
+                        className="btn primary"
+                        style={{ flex: 1, fontSize: '0.85em' }}
+                        disabled={!isConnected}
+                        onClick={() => directResume()}
+                      >
+                        Resume from pad {resumeFromPad + 1}
+                      </button>
+                      <button
+                        className="btn secondary"
+                        style={{ fontSize: '0.85em' }}
+                        onClick={() => { localStorage.removeItem('resumeFromPad'); setResumeFromPad(0); }}
+                      >
+                        Start Fresh
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                <div className="row">
+                  <button
+                    className={`btn ${isJobRunning ? 'danger' : 'primary'}`}
+                    onClick={isJobRunning ? cancelJob : () => { if (resumeFromPad > 0) { localStorage.removeItem('resumeFromPad'); setResumeFromPad(0); } startJobFlow(); }}
+                    disabled={!isConnected && !isJobRunning}
+                  >
+                    {isJobRunning ? '⏹ ABORT JOB' : resumeFromPad > 0 ? '▶ Start From Beginning' : '▶ START JOB'}
+                  </button>
+
+                  <button
+                    className="btn secondary"
+                    onClick={handleDownloadGCode}
+                    disabled={isJobRunning}
+                  >
+                    💾 Download G-Code
+                  </button>
+                </div>
+
+                {jobMode === 'batch' && <p>Batch mode not supported in new flow yet</p>}
+              </div>
+            )}
+
+            {/* STAGE: PREFLIGHT */}
+            {jobStage === 'preflight' && (() => {
+              const checks = computePreflightChecks();
+              const criticalFailed = checks.some(c => c.critical && !c.passed);
+              return (
+                <div className="stage-box">
+                  <h4>Pre-flight Checklist</h4>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 14 }}>
+                    {checks.map(c => {
+                      const icon = c.passed ? '✓' : c.critical ? '✗' : '⚠';
+                      const color = c.passed ? '#3fb950' : c.critical ? '#f85149' : '#e3b341';
+                      return (
+                        <div key={c.id} style={{ display: 'flex', gap: 8, alignItems: 'flex-start', padding: '6px 8px', background: 'rgba(255,255,255,0.03)', borderRadius: 5, border: `1px solid ${color}22` }}>
+                          <span style={{ color, fontWeight: 700, fontSize: '1em', minWidth: 16, marginTop: 1 }}>{icon}</span>
+                          <div>
+                            <div style={{ color: c.passed ? '#e6edf3' : color, fontWeight: 500, fontSize: '0.85em' }}>{c.label}</div>
+                            <div style={{ color: '#8b949e', fontSize: '0.76em', marginTop: 1 }}>{c.detail}</div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  {criticalFailed && (
+                    <div style={{ marginBottom: 10, padding: '6px 10px', background: 'rgba(220,50,50,0.1)', border: '1px solid #f85149', borderRadius: 5, fontSize: '0.8em', color: '#f85149' }}>
+                      Fix the items marked ✗ before proceeding.
+                    </div>
+                  )}
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <button className="btn secondary full-width" onClick={() => setJobStage('idle')}>Cancel</button>
+                    <button
+                      className="btn primary full-width"
+                      disabled={criticalFailed}
+                      onClick={proceedFromPreflight}
+                    >
+                      {criticalFailed ? 'Fix Issues First' : 'Proceed ▶'}
+                    </button>
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* STAGE: HOMING */}
+            {jobStage === 'homing' && (
+              <div className="stage-box">
+                <h4>Homing Machine...</h4>
+                <div className="spinner"></div>
+              </div>
+            )}
+
+            {/* STAGE: PURGING */}
+            {jobStage === 'purging' && (
+              <div className="stage-box">
+                <h4>Purging Nozzle...</h4>
+                <p style={{ color: '#8b949e', fontSize: '0.85em' }}>
+                  Priming nozzle for {(purgeDurationMs / 1000).toFixed(1)}s at {localPressure} PSI before first pad.
+                </p>
+                <div className="spinner"></div>
+                <button className="btn danger full-width" style={{ marginTop: 10 }} onClick={cancelJob}>STOP</button>
+              </div>
+            )}
+
+            {/* STAGE: LOADING */}
+            {jobStage === 'loading' && (
+              <div className="stage-box">
+                <h4>Load PCB</h4>
+                <p style={{ color: '#8b949e', fontSize: '0.85em', marginBottom: 10 }}>
+                  Place and secure the PCB on the bed, then verify it is present before proceeding.
+                </p>
+
+                {/* Camera board-presence check */}
+                <button
+                  className="btn secondary full-width"
+                  style={{ marginBottom: 8 }}
+                  disabled={boardCheckBusy}
+                  onClick={async () => {
+                    setBoardCheckBusy(true);
+                    setBoardCheckResult(null);
+                    try {
+                      const r = await fetch('http://localhost:8000/api/check_board_present');
+                      if (r.ok) {
+                        const d = await r.json();
+                        setBoardCheckResult(d);
+                        if (d.present) setBoardConfirmed(true);
+                      } else {
+                        setBoardCheckResult({ present: null, reason: 'Vision server error — check manually.' });
+                      }
+                    } catch {
+                      setBoardCheckResult({ present: null, reason: 'Vision server offline — confirm manually below.' });
+                    } finally {
+                      setBoardCheckBusy(false);
+                    }
+                  }}
+                >
+                  {boardCheckBusy ? 'Checking…' : '📷 Check Board Present'}
+                </button>
+
+                {boardCheckResult && (
+                  <div style={{
+                    marginBottom: 10, padding: '6px 10px', borderRadius: 5, fontSize: '0.82em',
+                    background: boardCheckResult.present === true ? 'rgba(0,180,100,0.12)' : boardCheckResult.present === false ? 'rgba(220,50,50,0.1)' : 'rgba(227,179,65,0.12)',
+                    border: `1px solid ${boardCheckResult.present === true ? '#2da44e' : boardCheckResult.present === false ? '#f85149' : '#e3b341'}`,
+                    color: boardCheckResult.present === true ? '#3fb950' : boardCheckResult.present === false ? '#f85149' : '#e3b341',
+                  }}>
+                    {boardCheckResult.present === true && '✓ '}
+                    {boardCheckResult.present === false && '✗ '}
+                    {boardCheckResult.present === null && '⚠ '}
+                    {boardCheckResult.reason}
+                    {boardCheckResult.confidence != null && ` (${Math.round(boardCheckResult.confidence * 100)}% confidence)`}
+                  </div>
+                )}
+
+                {/* Manual override confirmation */}
+                <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: '0.85em', marginBottom: 12 }}>
+                  <input
+                    type="checkbox"
+                    checked={boardConfirmed}
+                    onChange={e => setBoardConfirmed(e.target.checked)}
+                    style={{ width: 'auto' }}
+                  />
+                  PCB is loaded and secured on the bed
+                </label>
+
+                <button
+                  className="btn primary lg full-width"
+                  disabled={!boardConfirmed}
+                  onClick={proceedToRegistration}
+                >
+                  {boardConfirmed ? 'Next: Start Job ▶' : 'Confirm board loaded first'}
+                </button>
+              </div>
+            )}
+
+            {/* STAGE: PROBING */}
+            {jobStage === 'probing' && (
+              <div className="stage-box">
+                <h4>Probing PCB Surface...</h4>
+                <p style={{ color: '#8b949e', fontSize: '0.85em' }}>
+                  Sending <code>G38.2 Z-30 F50</code> — machine lowers slowly until probe contact, then sets Z=0 at PCB surface.
+                </p>
+                {probeResult === null && <div className="spinner"></div>}
+                {probeResult === 'contact' && (
+                  <div style={{ marginTop: 8, padding: '6px 10px', background: 'rgba(0,180,100,0.12)', border: '1px solid #2da44e', borderRadius: 5, color: '#3fb950', fontSize: '0.85em', fontFamily: 'monospace' }}>
+                    ✓ Contact at Z={probedSurfaceZRef.current?.toFixed(3)} mm — G92 Z0 applied
+                  </div>
+                )}
+                {probeResult === 'no-contact' && (
+                  <div style={{ marginTop: 8, padding: '6px 10px', background: 'rgba(220,50,50,0.1)', border: '1px solid #f85149', borderRadius: 5, color: '#f85149', fontSize: '0.82em' }}>
+                    ⚠ No probe contact detected — continuing with current Z (no G92 Z0 applied). Check probe wiring or disable surface probe in settings.
+                  </div>
+                )}
+                <button className="btn danger full-width" style={{ marginTop: 10 }} onClick={cancelJob}>STOP</button>
+              </div>
+            )}
+
+            {/* STAGE: AUTO-ALIGNING */}
+            {jobStage === 'auto-aligning' && (
+              <div className="stage-box">
+                <h4>Vision Alignment</h4>
+                <p>Camera is precisely scanning fiducials to eliminate stretch/rotation errors...</p>
+                <div className="spinner"></div>
+              </div>
+            )}
+
+            {/* STAGE: DISPENSING */}
+            {jobStage === 'dispensing' && (
+              <div className="stage-box">
+                <h4>Dispensing...</h4>
+                {panelBoards && panelBoards.length > 1 && (
+                  <div style={{ marginBottom: 6, padding: '4px 10px', background: '#0d1117', border: '1px solid #30363d', borderRadius: 5, fontFamily: 'monospace', fontSize: '0.82em', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ color: '#8b949e' }}>Board</span>
+                    <span style={{ color: '#58a6ff', fontWeight: 700 }}>
+                      {currentBoardIdx + 1} / {panelBoards.length}
+                      {panelBoards[currentBoardIdx]?.name ? ` — ${panelBoards[currentBoardIdx].name}` : ''}
+                    </span>
+                  </div>
+                )}
+                <progress value={jobProgress.current} max={jobProgress.total}></progress>
+                <p>{jobProgress.current} / {jobProgress.total}</p>
+                {currentPadInfo && (
+                  <div style={{ marginTop: 10, padding: '8px 12px', background: '#0d1117', border: '1px solid #30363d', borderRadius: 6, fontFamily: 'monospace', fontSize: '0.82em', display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+                    <span style={{ color: '#ce93d8' }}>{currentPadInfo.mode === 'bead' ? '〰 bead' : '● dot'}</span>
+                    <span style={{ color: '#ffa726' }}>⊕ {currentPadInfo.pressure} PSI</span>
+                    {currentPadInfo.mode !== 'bead' && <span style={{ color: '#d32f2f' }}>⏱ {currentPadInfo.dwellMs} ms</span>}
+                    <span style={{ color: '#00c49a' }}>💧 {currentPadInfo.volumeUl} µL</span>
+                  </div>
+                )}
+                {enableDotVerification && dotCheckResults.length > 0 && (() => {
+                  const last = dotCheckResults[dotCheckResults.length - 1];
+                  const failed = dotCheckResults.filter(r => !r.passed).length;
+                  return (
+                    <div style={{ marginTop: 6, padding: '6px 10px', background: last.passed ? 'rgba(0,180,100,0.12)' : 'rgba(220,50,50,0.15)', border: `1px solid ${last.passed ? '#2da44e' : '#f85149'}`, borderRadius: 5, fontFamily: 'monospace', fontSize: '0.80em' }}>
+                      <span style={{ color: last.passed ? '#3fb950' : '#f85149', fontWeight: 600 }}>
+                        {last.passed ? '✓ Dot OK' : '✗ Dot MISSING'} — pad #{last.padIndex}
+                        {last.passed && last.diameter_mm > 0 ? ` (∅${last.diameter_mm}mm)` : ''}
+                      </span>
+                      {failed > 0 && <span style={{ color: '#f85149', marginLeft: 12 }}>{failed} failed so far</span>}
+                    </div>
+                  );
+                })()}
+                <button className="btn danger full-width" onClick={cancelJob}>STOP</button>
+              </div>
+            )}
+
+            {/* STAGE: FINISHED */}
+            {jobStage === 'finished' && (
+              <div className="stage-box">
+                <h4>Job Complete!</h4>
+                {jobReport && (
+                  <table style={{ width: '100%', fontSize: '0.85em', marginBottom: 10, borderCollapse: 'collapse' }}>
+                    <tbody>
+                      <tr><td style={{ color: '#8b949e', padding: '2px 6px' }}>Pads dispensed</td><td style={{ color: '#e6edf3', textAlign: 'right' }}>{jobReport.totalPads}</td></tr>
+                      <tr><td style={{ color: '#8b949e', padding: '2px 6px' }}>Total paste used</td><td style={{ color: '#00c49a', textAlign: 'right' }}>{jobReport.totalVolUl} µL</td></tr>
+                      <tr><td style={{ color: '#8b949e', padding: '2px 6px' }}>Duration</td><td style={{ color: '#e6edf3', textAlign: 'right' }}>{jobReport.jobDurationSec} s</td></tr>
+                      <tr><td style={{ color: '#8b949e', padding: '2px 6px' }}>Avg dwell</td><td style={{ color: '#d32f2f', textAlign: 'right' }}>{jobReport.avgDwellMs} ms</td></tr>
+                      <tr><td style={{ color: '#8b949e', padding: '2px 6px' }}>Base pressure</td><td style={{ color: '#ffa726', textAlign: 'right' }}>{jobReport.basePressure} PSI</td></tr>
+                      {enableSurfaceProbe && (
+                        <tr>
+                          <td style={{ color: '#8b949e', padding: '2px 6px' }}>PCB surface (Z probe)</td>
+                          <td style={{ textAlign: 'right', fontFamily: 'monospace', color: jobReport.probedSurfaceZ != null ? '#58a6ff' : '#e3b341' }}>
+                            {jobReport.probedSurfaceZ != null ? `${jobReport.probedSurfaceZ.toFixed(3)} mm` : '⚠ no contact'}
+                          </td>
+                        </tr>
+                      )}
+                      {jobReport.dotsChecked != null && (
+                        <tr>
+                          <td style={{ color: '#8b949e', padding: '2px 6px' }}>Dot verification</td>
+                          <td style={{ textAlign: 'right', color: jobReport.dotsFailed === 0 ? '#3fb950' : '#f85149', fontWeight: 600 }}>
+                            {jobReport.dotsFailed === 0
+                              ? `✓ All ${jobReport.dotsChecked} passed`
+                              : `✗ ${jobReport.dotsFailed} / ${jobReport.dotsChecked} failed`}
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                )}
+                {jobReport?.dotsFailed > 0 && dotCheckResults.length > 0 && (
+                  <div style={{ marginBottom: 10, padding: '6px 10px', background: 'rgba(220,50,50,0.1)', border: '1px solid #f85149', borderRadius: 5, fontSize: '0.78em', fontFamily: 'monospace' }}>
+                    <div style={{ color: '#f85149', fontWeight: 600, marginBottom: 4 }}>Failed pads:</div>
+                    {dotCheckResults.filter(r => !r.passed).map(r => (
+                      <div key={r.padIndex} style={{ color: '#e6edf3' }}>Pad #{r.padIndex}</div>
+                    ))}
+                  </div>
+                )}
+                <div style={{ fontSize: '0.75em', color: '#8b949e', marginBottom: 8, fontFamily: 'monospace', wordBreak: 'break-all' }}>
+                  Log saved to: Documents/SolderPasteJobLogs/
+                </div>
+                <button className="btn full-width" onClick={() => setJobStage('idle')}>Done</button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
-    </div>
 
-    {/* ── Auto-resume portal card — fixed bottom-right, always on top ─────── */}
-    {autoResumeCountdown > 0 && createPortal(
-      <div style={{
-        position: 'fixed',
-        bottom: 24,
-        right: 24,
-        zIndex: 9999,
-        minWidth: 260,
-        background: '#0d1117',
-        border: '2px solid #388bfd',
-        borderRadius: 10,
-        padding: '16px 20px',
-        boxShadow: '0 4px 24px rgba(56,139,253,0.25)',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 12,
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <span style={{ fontSize: '1em', color: '#79c0ff', fontWeight: 700 }}>↩ Auto-resuming job</span>
-        </div>
-        <div style={{ color: '#e6edf3', fontSize: '0.9em' }}>
-          Resuming from pad <strong>{resumeFromPad + 1}</strong> in{' '}
-          <strong style={{ fontSize: '1.6em', color: '#79c0ff', lineHeight: 1 }}>{autoResumeCountdown}</strong>
-        </div>
-        <button
-          onClick={cancelAutoResume}
-          style={{
-            height: 48,
-            border: '2px solid #f85149',
-            borderRadius: 6,
-            background: 'transparent',
-            color: '#f85149',
-            fontWeight: 700,
-            fontSize: '0.9em',
-            letterSpacing: '0.05em',
-            cursor: 'pointer',
-            textTransform: 'uppercase',
-          }}
-        >
-          Cancel Resume
-        </button>
-      </div>,
-      document.body
-    )}
+      {/* ── Auto-resume portal card — fixed bottom-right, always on top ─────── */}
+      {autoResumeCountdown > 0 && createPortal(
+        <div style={{
+          position: 'fixed',
+          bottom: 24,
+          right: 24,
+          zIndex: 9999,
+          minWidth: 260,
+          background: '#0d1117',
+          border: '2px solid #388bfd',
+          borderRadius: 10,
+          padding: '16px 20px',
+          boxShadow: '0 4px 24px rgba(56,139,253,0.25)',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 12,
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span style={{ fontSize: '1em', color: '#79c0ff', fontWeight: 700 }}>↩ Auto-resuming job</span>
+          </div>
+          <div style={{ color: '#e6edf3', fontSize: '0.9em' }}>
+            Resuming from pad <strong>{resumeFromPad + 1}</strong> in{' '}
+            <strong style={{ fontSize: '1.6em', color: '#79c0ff', lineHeight: 1 }}>{autoResumeCountdown}</strong>
+          </div>
+          <button
+            onClick={cancelAutoResume}
+            style={{
+              height: 48,
+              border: '2px solid #f85149',
+              borderRadius: 6,
+              background: 'transparent',
+              color: '#f85149',
+              fontWeight: 700,
+              fontSize: '0.9em',
+              letterSpacing: '0.05em',
+              cursor: 'pointer',
+              textTransform: 'uppercase',
+            }}
+          >
+            Cancel Resume
+          </button>
+        </div>,
+        document.body
+      )}
     </>
   );
 }

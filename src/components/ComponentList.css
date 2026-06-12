@@ -1,109 +1,110 @@
+/* ── Component List ───────────────────────────────────────── */
+.Components-section {
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-md);
+  background: var(--bg-card);
+  padding: 10px;
+  margin-top: 8px;
+}
+
 .components .comp-list {
   list-style: none;
   padding: 0;
-  margin: 0;
+  margin: 8px 0 0;
   max-height: 28vh;
-  overflow: auto;
+  overflow-y: auto;
   border: 1px solid var(--border-primary);
-  margin-top: 10px;
-  border-radius: 8px;
-  margin-left: 8px;
-  background: rgba(15, 23, 42, 0.3);
+  border-radius: var(--radius-sm);
+  background: var(--bg-input);
 }
 
-.Components-section {
-  border: 1px solid var(--border-primary);
-  margin-top: 10px;
-  border-radius: 8px;
-  background: var(--bg-tertiary);
-  padding: 8px;
+/* Scrollbar */
+.components .comp-list::-webkit-scrollbar { width: 8px; }
+.components .comp-list::-webkit-scrollbar-track { background: var(--bg-app); }
+.components .comp-list::-webkit-scrollbar-thumb {
+  background: var(--border-highlight);
+  border-radius: 4px;
 }
 
 .components .comp-item {
   display: grid;
   grid-template-columns: 1fr auto;
   grid-template-rows: auto auto;
-  gap: 6px 8px;
+  gap: 4px 8px;
   align-items: center;
-  padding: 8px 12px;
-  border-bottom: 1px solid var(--border-secondary);
-  transition: all 0.2s ease;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border-primary);
+  transition: all var(--transition);
   color: var(--text-secondary);
+  cursor: pointer;
 }
-
-.components .comp-item:last-child {
-  border-bottom: none;
-}
-
+.components .comp-item:last-child { border-bottom: none; }
 .components .comp-item:hover {
-  background: rgba(59, 130, 246, 0.1);
-  padding-left: 16px;
+  background: var(--bg-hover);
+  padding-left: 14px;
+  color: var(--text-primary);
 }
 
 .components .comp-item.selected {
-  background: rgba(234, 179, 8, 0.15);
-  border-left: 3px solid #eab308;
+  background: rgba(0,200,215,0.06);
+  border-left: 2px solid var(--accent-primary);
+  padding-left: 8px;
 }
-
 .components .comp-item.selected:hover {
-  background: rgba(234, 179, 8, 0.25);
+  background: rgba(0,200,215,0.1);
 }
 
 .components .comp-item.home {
-  background: rgba(34, 197, 94, 0.1);
-  border-left: 3px solid #22c55e;
+  background: rgba(0,232,122,0.05);
+  border-left: 2px solid var(--accent-success);
+  padding-left: 8px;
 }
-
 .components .comp-item.home:hover {
-  background: rgba(34, 197, 94, 0.15);
+  background: rgba(0,232,122,0.09);
 }
 
 .components .comp-meta {
   display: flex;
-  gap: 8px;
+  gap: 7px;
   align-items: center;
 }
 
 .components .comp-name {
+  font-size: 0.82rem;
   font-weight: 600;
   color: var(--text-primary);
 }
 
 .badge-home {
-  background: #15803d;
-  color: #fff;
-  border-radius: 4px;
-  padding: 2px 6px;
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.5px;
+  background: rgba(0,232,122,0.15);
+  color: var(--accent-success);
+  border: 1px solid rgba(0,232,122,0.35);
+  border-radius: var(--radius-sm);
+  padding: 1px 6px;
+  font-size: 0.66rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
 }
 
 .components .comp-dist {
-  font-size: 12px;
-  opacity: 0.7;
+  font-size: 0.72rem;
+  color: var(--text-muted);
   grid-column: 1 / 2;
-  font-family: 'Roboto Mono', monospace;
+  font-family: var(--font-mono);
+  letter-spacing: 0.03em;
 }
 
 .components .comp-actions {
   grid-column: 2 / 3;
+  grid-row: 1 / 3;
   display: flex;
-  gap: 6px;
+  gap: 5px;
   justify-content: flex-end;
+  align-items: center;
 }
-
 .components .comp-actions .btn {
-  padding: 4px 8px;
-  margin: 0;
-  font-size: 12px;
-  background: var(--bg-button);
-  border: 1px solid var(--border-secondary);
-  color: var(--text-secondary);
-}
-
-.components .comp-actions .btn:hover {
-  background: var(--bg-button-hover);
-  color: var(--text-primary);
-  border-color: var(--border-primary);
+  padding: 3px 8px;
+  font-size: 0.7rem;
+  min-height: 26px;
 }

@@ -1,149 +1,176 @@
+/* ── Serial Panel ─────────────────────────────────────────── */
 .serial-layout {
   display: flex;
-  gap: 16px;
+  gap: 12px;
   align-items: stretch;
-  margin-top: 16px;
 }
 
+/* Left controls pane */
 .control-pane {
-  flex: 0 0 320px;
-  background-color: #d1d5db; /* Light grey */
-  padding: 16px;
-  border-radius: 8px;
+  flex: 0 0 300px;
+  background: var(--bg-card);
+  padding: 14px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-primary);
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
+  box-shadow: var(--shadow-sm);
 }
 
 .control-pane h3 {
-  margin: 0 0 8px 0;
-  color: #333;
-  font-size: 1.4em;
+  margin: 0 0 4px 0;
+  color: var(--text-bright);
+  font-size: 0.82rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  border-bottom: 1px solid var(--border-primary);
+  padding-bottom: 8px;
 }
 
+/* 3-column jog grid */
 .control-grid-3 {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 8px;
+  gap: 6px;
 }
 
+/* 5-column step selector */
 .control-grid-5 {
   display: grid;
   grid-template-columns: repeat(5, 1fr);
-  gap: 8px;
-  margin-top: 4px;
+  gap: 5px;
+  margin-top: 2px;
 }
 
+/* Dark jog buttons (kept as a separate variant) */
 .btn-dark {
-  background-color: #262626;
-  color: #ffffff;
-  border: none;
-  border-radius: 8px;
-  padding: 16px 8px;
-  font-size: 0.85em;
-  font-weight: bold;
+  background: var(--bg-hover);
+  color: var(--text-primary);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-sm);
+  padding: 14px 6px;
+  font-size: 0.82rem;
+  font-weight: 700;
   cursor: pointer;
-  transition: background-color 0.1s;
+  transition: all 0.12s;
   display: flex;
   align-items: center;
   justify-content: center;
   text-align: center;
+  box-shadow: 0 3px 0 rgba(0,0,0,0.6);
+  font-family: var(--font-main);
 }
-
-.btn-dark:hover {
-  background-color: #404040;
+.btn-dark:hover:not(:disabled) {
+  background: rgba(0,200,215,0.1);
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
+  box-shadow: 0 0 8px rgba(0,200,215,0.2), 0 3px 0 rgba(0,0,0,0.6);
 }
-
-.btn-dark:active {
-  background-color: #171717;
+.btn-dark:active:not(:disabled) {
+  transform: translateY(2px);
+  box-shadow: 0 1px 0 rgba(0,0,0,0.6);
 }
-
+.btn-dark:disabled { opacity: 0.25; cursor: not-allowed; }
 .btn-dark.small {
-  padding: 10px 4px;
-  font-size: 0.75em;
+  padding: 8px 4px;
+  font-size: 0.72rem;
 }
 
+/* Right console pane */
 .console-pane {
   flex: 1;
-  background-color: #9ca3af; /* Medium grey behind console */
-  padding: 8px;
-  border-radius: 8px;
+  background: var(--bg-card);
+  padding: 10px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-primary);
   display: flex;
   flex-direction: column;
   gap: 8px;
-  height: 400px; /* Force rigid height so it scrolls instead of expanding */
+  min-height: 360px;
+  box-shadow: var(--shadow-sm);
 }
 
+/* Terminal output window */
 .console-window {
-  background: #ffffff;
-  color: #333;
-  font-family: 'JetBrains Mono', 'Fira Code', 'Courier New', monospace;
-  font-size: 13px;
-  padding: 4px;
-  border-radius: 4px;
+  background: var(--bg-input);
+  color: var(--accent-primary);
+  font-family: var(--font-mono);
+  font-size: 0.76rem;
+  padding: 8px;
+  border-radius: var(--radius-sm);
   flex: 1;
   overflow-y: auto;
-  border: 1px solid #6b7280;
-  line-height: 1.6;
+  border: 1px solid var(--border-primary);
+  line-height: 1.65;
 }
-
 .console-window div {
   margin: 0;
-  padding: 2px 4px;
+  padding: 1px 4px;
   word-break: break-all;
-  border-bottom: 1px solid #e5e7eb;
+  border-bottom: 1px solid rgba(30,35,51,0.5);
+  transition: background var(--transition);
 }
+.console-window div:last-child { border-bottom: none; }
+.console-window div:hover { background: rgba(0,200,215,0.04); }
 
-.console-window div:last-child {
-  border-bottom: none;
-}
+/* Coloured line types */
+.console-window .line-sent { color: var(--accent-primary); }
+.console-window .line-recv { color: var(--accent-success); }
+.console-window .line-err  { color: var(--accent-danger); }
+.console-window .line-sys  { color: var(--text-secondary); }
 
-/* Custom scrollbar for console */
-.console-window::-webkit-scrollbar {
-  width: 12px;
-}
-.console-window::-webkit-scrollbar-track {
-  background: #f3f4f6;
-  border-left: 1px solid #d1d5db;
-}
+/* Scrollbar */
+.console-window::-webkit-scrollbar { width: 8px; }
+.console-window::-webkit-scrollbar-track { background: var(--bg-app); }
 .console-window::-webkit-scrollbar-thumb {
-  background: #6b7280;
-  border-radius: 0px; /* blocky scrollbar like image */
+  background: var(--border-highlight);
+  border-radius: 4px;
 }
-.console-window::-webkit-scrollbar-thumb:hover {
-  background: #4b5563;
-}
+.console-window::-webkit-scrollbar-thumb:hover { background: var(--text-secondary); }
 
+/* Command input row */
 .console-input-row {
   display: flex;
-  gap: 8px;
+  gap: 7px;
 }
-
 .console-input-row input {
   flex: 1;
-  background-color: #374151;
-  color: #f3f4f6;
-  border: 2px solid #a855f7; /* Purple tinted border shown in image */
-  border-radius: 4px;
-  padding: 8px 12px;
-  font-family: 'JetBrains Mono', 'Fira Code', 'Courier New', monospace;
+  background: var(--bg-input);
+  color: var(--text-bright);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-sm);
+  padding: 7px 10px;
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+  min-height: 34px;
+  transition: border-color var(--transition), box-shadow var(--transition);
 }
-
 .console-input-row input:focus {
   outline: none;
-  border-color: #d8b4fe;
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 2px rgba(0,200,215,0.15);
 }
+.console-input-row input::placeholder { color: var(--text-muted); }
 
 .btn-send {
-  background-color: #1f2937;
-  color: white;
-  border: none;
-  border-radius: 4px;
-  padding: 0 24px;
-  font-weight: bold;
+  background: rgba(0,200,215,0.08);
+  color: var(--accent-primary);
+  border: 1px solid rgba(0,200,215,0.35);
+  border-radius: var(--radius-sm);
+  padding: 0 18px;
+  font-weight: 700;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
   cursor: pointer;
+  transition: all var(--transition);
+  min-height: 34px;
+  font-family: var(--font-main);
 }
-
 .btn-send:hover {
-  background-color: #374151;
+  background: var(--accent-primary);
+  color: #000;
+  box-shadow: var(--glow-primary);
 }

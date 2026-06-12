@@ -104,8 +104,8 @@
 
 /* ── Left Sidebar ───────────────────────────────────────── */
 .sidebar {
-  width: 380px;
-  min-width: 380px;
+  width: 360px;
+  min-width: 320px;
   background: var(--bg-sidebar);
   border-right: 1px solid var(--border-primary);
   display: flex;

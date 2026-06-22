@@ -47,9 +47,11 @@ function padCenter(p) {
 function processPads(points) {
   return points.map((pad, idx) => {
     const c = calculatePadCenter(pad);
-    return { ...pad, x: c.x, y: c.y, id: pad.componentIdentifier || `P${idx + 1}`,
+    return {
+      ...pad, x: c.x, y: c.y, id: pad.componentIdentifier || `P${idx + 1}`,
       width: pad.width || c.width || 1, height: pad.height || c.height || 1,
-      centerValid: c.valid, centerMethod: c.method, originalPad: pad };
+      centerValid: c.valid, centerMethod: c.method, originalPad: pad
+    };
   });
 }
 
@@ -301,7 +303,6 @@ export default function App() {
 
         try {
           const T = fitSimilarity(designPts, machinePts);
-          console.log("Panel Alignment Computed:", T);
           next.transform = T;
           setXf(T);
           setApplyXf(true);
@@ -407,11 +408,10 @@ export default function App() {
   const verifyTransform = useCallback((designPt) => {
     if (!xf || !applyXf) return designPt;
     const transformed = applyTransform(xf, designPt);
-    console.log(`Transform verification: Design(${designPt.x.toFixed(3)}, ${designPt.y.toFixed(3)}) → Machine(${transformed.x.toFixed(3)}, ${transformed.y.toFixed(3)})`);
     return transformed;
   }, [xf, applyXf]);
 
-  const FID_COLORS  = ["#2ea8ff", "#8e2bff", "#b7c400", "#ff6b35", "#9c27b0", "#25d9be"];
+  const FID_COLORS = ["#2ea8ff", "#8e2bff", "#b7c400", "#ff6b35", "#9c27b0", "#25d9be"];
   const RAIL_COLORS = ["#ff9800", "#ff5722", "#ffc107", "#ff6d00"];
 
   // Full re-initialisation for a given side: re-detects fiducials, replaces the fiducial
@@ -427,14 +427,14 @@ export default function App() {
     const makeBoardFids = (offsetX = 0, offsetY = 0) =>
       detected.length > 0
         ? detected.map((fid, idx) => ({
-            id: fid.id || `F${idx + 1}`,
-            design: { x: parseFloat((fid.x + offsetX).toFixed(4)), y: parseFloat((fid.y + offsetY).toFixed(4)) },
-            machine: null, color: FID_COLORS[idx % FID_COLORS.length], confidence: fid.confidence,
-          }))
+          id: fid.id || `F${idx + 1}`,
+          design: { x: parseFloat((fid.x + offsetX).toFixed(4)), y: parseFloat((fid.y + offsetY).toFixed(4)) },
+          machine: null, color: FID_COLORS[idx % FID_COLORS.length], confidence: fid.confidence,
+        }))
         : [
-            { id: 'F1', design: null, machine: null, color: '#2ea8ff' },
-            { id: 'F2', design: null, machine: null, color: '#8e2bff' },
-          ];
+          { id: 'F1', design: null, machine: null, color: '#2ea8ff' },
+          { id: 'F2', design: null, machine: null, color: '#8e2bff' },
+        ];
 
     const newRailFids = detectedRail.map((fid, idx) => ({
       id: fid.id || `R${idx + 1}`,
@@ -474,14 +474,14 @@ export default function App() {
     const makeBoardFiducials = (offsetX = 0, offsetY = 0) =>
       detectedFiducials.length > 0
         ? detectedFiducials.map((fid, idx) => ({
-            id: fid.id || `F${idx + 1}`,
-            design: { x: parseFloat((fid.x + offsetX).toFixed(4)), y: parseFloat((fid.y + offsetY).toFixed(4)) },
-            machine: null, color: fidColors[idx % fidColors.length], confidence: fid.confidence,
-          }))
+          id: fid.id || `F${idx + 1}`,
+          design: { x: parseFloat((fid.x + offsetX).toFixed(4)), y: parseFloat((fid.y + offsetY).toFixed(4)) },
+          machine: null, color: fidColors[idx % fidColors.length], confidence: fid.confidence,
+        }))
         : [
-            { id: "F1", design: null, machine: null, color: "#2ea8ff" },
-            { id: "F2", design: null, machine: null, color: "#8e2bff" },
-          ];
+          { id: "F1", design: null, machine: null, color: "#2ea8ff" },
+          { id: "F2", design: null, machine: null, color: "#8e2bff" },
+        ];
 
     const autoRailFids = detectedRailFiducials.map((fid, idx) => ({
       id: fid.id || `R${idx + 1}`,
@@ -976,7 +976,6 @@ export default function App() {
       const dx = selectedMm.x - activeRef.x;
       const dy = selectedMm.y - activeRef.y;
       const dist = Math.hypot(dx, dy);
-      console.log('Distance calculation:', { dx, dy, dist, selectedMm, activeRef });
       const midX = (uh.x + uf.x) / 2, midY = (uh.y + uf.y) / 2 - uh.r * 0.6;
       drawText(gm, midX, midY, `${dist.toFixed(3)} mm`, uh.r * 1.2, "#222", "#fffb");
     }
@@ -1413,7 +1412,6 @@ export default function App() {
       const hasChanged = !prev || Math.abs(prev.x - selectedOrigin.x) > 0.001 || Math.abs(prev.y - selectedOrigin.y) > 0.001;
 
       if (hasChanged) {
-        // console.log('Origin changed, updating overlay:', selectedOrigin);
         prevOriginLogRef.current = { ...selectedOrigin };
         setTimeout(() => updateOverlay(), 300);
       }
@@ -1432,7 +1430,6 @@ export default function App() {
       const widthMm = geom.vbW * geom.mmPerUnit;
       const heightMm = geom.vbH * geom.mmPerUnit;
       if (mm.x < 0 || mm.x > widthMm || mm.y < 0 || mm.y > heightMm) {
-        console.log('Click outside board bounds ignored:', mm);
         return;
       }
     }
@@ -1473,12 +1470,6 @@ export default function App() {
         centerMethod: hit.pos.centerMethod,
         originalPad: pads[hit.pad]
       };
-      console.log('🔄 Coordinate selection:', {
-        originalPad: { x: hit.pos.x, y: hit.pos.y },
-        origin: { x: origin.x, y: origin.y },
-        selectedMm: padCenter,
-        note: 'Storing absolute coordinates for overlay. Distances calculated in UI.'
-      });
     } else {
       padCenter = {
         x: hit.pos.x,
@@ -1488,14 +1479,6 @@ export default function App() {
         originalPad: pads[hit.pad]
       };
     }
-
-    console.log('Pad selection details:', {
-      clickMm: mm,
-      hitPad: hit.pad + 1,
-      hitPos: hit.pos,
-      padCenter,
-      distanceToCenter: hit.distanceToCenter
-    });
 
     if (!hit.pos.centerValid) {
       console.warn('Pad center calculation may be inaccurate:', hit.pos.centerMethod);
@@ -1605,7 +1588,6 @@ export default function App() {
         : fitSimilarity(withDesign.map(f => f.design), withDesign.map(f => f.machine));
     setApplyXf(true);  // check "Apply transform to output" first
     setXf(T);
-    console.log(`[AutoSolve] Board transform computed (${withDesign.length} pts, applyXf enabled)`);
   }, [fiducials]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Auto-solve panel rail transform once ALL rail fiducials have machine coords ──
@@ -1619,7 +1601,6 @@ export default function App() {
         ? fitAffine(withDesign.map(f => f.design), withDesign.map(f => f.machine))
         : fitSimilarity(withDesign.map(f => f.design), withDesign.map(f => f.machine));
     setPanelXf(T);
-    console.log(`[AutoSolve] Panel rail transform computed (${withDesign.length} pts)`);
   }, [panelRailFiducials]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const onRedetectFiducials = () => {
@@ -1660,7 +1641,10 @@ export default function App() {
   };
 
   const onAutoDetectCamera = async () => {
-    console.log('Camera-based fiducial detection initiated');
+    if (!window.cameraAutoDetect) {
+      showToast("Camera auto-detection is not available in this version.");
+      return;
+    };
   };
 
   const onDetectOrigins = () => {
@@ -1677,7 +1661,7 @@ export default function App() {
       setSelectedOrigin(null);
     }
   };
-  
+
   useEffect(() => {
     window.updateFiducialsFromCamera = (detectedFiducials) => {
       const colors = ["#2ea8ff", "#8e2bff", "#00c49a", "#ff6b35", "#9c27b0", "#4caf50"];

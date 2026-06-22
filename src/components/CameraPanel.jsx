@@ -332,7 +332,6 @@ export default function CameraPanel({
         setVisionResult(result);
 
         if (result && result.detected && result.offset) {
-          console.log('[Auto-Align] Pad detected at offset:', result.offset);
 
           const dxMm = result.offset.x;
           const distMm = Math.hypot(dxMm, result.offset.y);
@@ -341,7 +340,6 @@ export default function CameraPanel({
             const cmds = jogRel({ dx: dxMm, dy: result.offset.y, feed: 500 });
             if (window.serial && window.serial.writeLine) {
               for (const line of cmds) await window.serial.writeLine(line);
-              console.log('[Auto-Align] Jogged once by:', dxMm.toFixed(3), result.offset.y.toFixed(3));
             }
           } else {
             console.warn('[Auto-Align] Pad correction rejected — distance out of bounds:', distMm);
@@ -427,7 +425,6 @@ export default function CameraPanel({
   }, [H, projectPx]);
 
   const predictedPx = useMemo(() => {
-    // console.log("selected design: ", selectedDesign);
     if (!selectedDesign) return null;
     let m;
     if (applyXf && xf) {
@@ -695,7 +692,6 @@ export default function CameraPanel({
       );
 
       if (latestCb) latestCb(newFids);
-      console.log(`Mapped ${pendingPick} to absolute Machine Pos: X${newX.toFixed(3)}, Y${newY.toFixed(3)}`);
       setPendingPick(null);
     }
 
@@ -930,23 +926,6 @@ export default function CameraPanel({
     const fid = allFids.find(f => f.id === fidActiveId);
     if (!fid || !fid.design) { setAutoSearchStatus(''); return; }
 
-    // Rail fiducials use panelXf; board fiducials use xf.
-    // For solved-reference lookup (when transform is null), pass the correct list:
-    // rail fiducials for rail targets so R1 can serve as translation reference for R2;
-    // board fiducials for board targets so F1 can serve as translation reference for F2.
-    // const transform = isRail ? cProps.panelXf : cProps.xf;
-    // const solveRef  = isRail ? (cProps.panelRailFiducials || []) : (cProps.fiducials || []);
-    // let machPos = predictFidMachinePos(fid, solveRef, transform, cProps.effectiveOrigin);
-
-    // Board fiducial secondary fallback: when xf is not yet solved (F1 just captured, F2 next)
-    // but panelXf IS solved (rail fiducials done first), use the panel transform to estimate
-    // the board fiducial's machine position — boards share the panel's design coordinate space.
-    // if (!machPos && !isRail && cProps.panelXf && fid.design) {
-    //   machPos = applyTransform(cProps.panelXf, fid.design);
-    // }
-    // if (!machPos) { setAutoSearchStatus('No transform — jog manually'); return; }
-
-
     // Rail fiducials: use panelXf; board fiducials: use board xf, falling back to
     // panelXf when the board transform isn't solved yet (panelXf can map any design
     // coord to machine space once the rail is aligned).
@@ -984,7 +963,6 @@ export default function CameraPanel({
 
     setAutoSearchStatus(`Moving to ${fidActiveId}…`);
     setTimeout(() => setAutoSearchStatus(''), 2500);
-    console.log(`[AutoSearch] ${fidActiveId} → camera (${camX.toFixed(3)}, ${camY.toFixed(3)})`);
   }, [fidActiveId, detectionInterval, panelXf]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // --- OVERWRITE HELPER: update a specific slot by ID without advancing the arm dropdown ---
@@ -997,7 +975,6 @@ export default function CameraPanel({
       cProps.setPanelRailFiducials(railFids.map((f, i) =>
         i === railIdx ? { ...f, machine: coord, autoDetected: true } : f
       ));
-      console.log(`[SnapCorrect] Corrected rail ${id} ← (${coord.x.toFixed(3)}, ${coord.y.toFixed(3)})`);
       return;
     }
     // panelBoards local fiducials
@@ -1011,7 +988,6 @@ export default function CameraPanel({
           f.id === id ? { ...f, machine: coord, autoDetected: true } : f
         );
         setPBoards(pBoards.map((b, i) => i === bIdx ? { ...b, fiducials: newFids } : b));
-        console.log(`[SnapCorrect] Corrected local ${id} ← (${coord.x.toFixed(3)}, ${coord.y.toFixed(3)})`);
         return;
       }
     }
@@ -1020,7 +996,6 @@ export default function CameraPanel({
       f.id === id ? { ...f, machine: coord, autoDetected: true } : f
     );
     cProps.onUpdateFiducials?.(updated);
-    console.log(`[SnapCorrect] Corrected fid ${id} ← (${coord.x.toFixed(3)}, ${coord.y.toFixed(3)})`);
   };
 
   // --- FIDUCIAL STORAGE HELPER ---
@@ -1052,7 +1027,6 @@ export default function CameraPanel({
       overwriteFiducialById(lastSaved.id, estimatedWorld);
       lastAutoSavedRef.current = { id: lastSaved.id, position: { ...estimatedWorld } };
       saveBlockRef.current = Date.now() + 2000;
-      console.log(`[FiducialDetect] Still near ${lastSaved.id} — overwriting same slot, arm stays.`);
       return;
     }
 
@@ -1068,7 +1042,6 @@ export default function CameraPanel({
         setRailFids(railFids.map((f, i) =>
           i === armedRailIdx ? { ...f, machine: estimatedWorld, autoDetected: true } : f
         ));
-        console.log(`[FiducialDetect] Rail ${armedId} ← Machine(${estimatedWorld.x.toFixed(3)}, ${estimatedWorld.y.toFixed(3)})`);
         saveBlockRef.current = Date.now() + 4000; // block detection 4s — operator must physically move to next fiducial
         lastAutoSavedRef.current = { id: armedId, position: { ...estimatedWorld } };
         cProps.onAdvanceArmedFid?.(armedId);
@@ -1122,7 +1095,6 @@ export default function CameraPanel({
         const gf = sortedGerberFids[effectiveSnapCount];
         designCoord = { x: gf.x, y: gf.y };
         const action = nearbyIdx >= 0 ? 'Overwriting' : 'New snap';
-        console.log(`[FiducialDetect] ${action} #${effectiveSnapCount + 1} → Gerber (${gf.x.toFixed(3)}, ${gf.y.toFixed(3)}), machine (${estimatedWorld.x.toFixed(3)}, ${estimatedWorld.y.toFixed(3)})`);
       } else {
         const existing = targetFidIdx >= 0 ? newFiducials[targetFidIdx].design : null;
         designCoord = existing || null;
@@ -1172,7 +1144,6 @@ export default function CameraPanel({
       };
       fidsChanged = true;
       savedFidId = nextFids[pushIdx].id;
-      console.log(`[FiducialDetect] ${action} slot #${pushIdx + 1} at Machine(${estimatedWorld.x.toFixed(3)}, ${estimatedWorld.y.toFixed(3)})`);
     }
 
     if (changedBoards && setPBoards) {
@@ -1301,7 +1272,6 @@ export default function CameraPanel({
               // Upgrade to fine mode so the next poll uses the sub-pixel Otsu centroid.
               servoStateRef.current = { ...servoStateRef.current, phase: 'fine' };
               convergenceCountRef.current = 0;
-              console.log('[PyServo] Within coarse threshold — switching to fine phase for sub-pixel confirmation');
             } else {
               convergenceCountRef.current++;
               if (convergenceCountRef.current >= CONVERGE_STABLE_FRAMES) {
@@ -1312,7 +1282,6 @@ export default function CameraPanel({
                 const camOffset = cameraOffset || { dx: 0, dy: 0 };
                 const savedCoord = { x: machPos.x + camOffset.dx, y: machPos.y + camOffset.dy };
                 saveFiducialCoordinate(savedCoord, 1.0);
-                console.log(`[PyServo] ✅ Converged (${CONVERGE_STABLE_FRAMES} stable frames). Saved X${savedCoord.x.toFixed(3)} Y${savedCoord.y.toFixed(3)}`);
               } else {
                 console.log(`[PyServo] Fine-phase stable ${convergenceCountRef.current}/${CONVERGE_STABLE_FRAMES} — holding...`);
               }
@@ -1324,7 +1293,6 @@ export default function CameraPanel({
           // If dist > CONVERGE_MM, OR within CONVERGE_MM but haven't jogged yet → jog toward center
           if (dist <= CONVERGE_MM && !canConverge) {
             // First-poll near-zero offset: treat as a residual — do a micro-jog to physically verify
-            console.log(`[PyServo] Near-zero offset (${dist.toFixed(4)}mm) but haven't jogged yet — micro-jogging to verify centring`);
           }
 
           // Jog toward fiducial center. Coarse: faster + longer settle; Fine: normal.
@@ -1468,11 +1436,6 @@ export default function CameraPanel({
               if (!hasJoggedRef.current && (Math.abs(dx) > 0.005 || Math.abs(dy) > 0.005)) {
                 hasJoggedRef.current = { x: crosshairCoord.x, y: crosshairCoord.y }; // Lock immediately
 
-                console.log(`[FiducialAlign] --- Auto-Align Triggered ---`);
-                console.log(`[FiducialAlign] Fiducial: X${detectedFidCoord.x.toFixed(4)} Y${detectedFidCoord.y.toFixed(4)}`);
-                console.log(`[FiducialAlign] Crosshair: X${crosshairCoord.x.toFixed(4)} Y${crosshairCoord.y.toFixed(4)}`);
-                console.log(`[FiducialAlign] Offset: ΔX=${dx} ΔY=${dy}`);
-                console.log(`[FiducialAlign] Sending G-code relative move ΔX:${dx} ΔY:${dy}`);
 
                 try {
                   // Step 1: Move camera crosshair to exactly center on the fiducial
@@ -1529,7 +1492,6 @@ export default function CameraPanel({
 
       const dx = parseFloat(data.offset_dx.toFixed(4));
       const dy = parseFloat(data.offset_dy.toFixed(4));
-      console.log(`[SnapToFiducial] Centroid offset ΔX:${dx} ΔY:${dy} mm`);
 
       const camOffset = cameraOffset || { dx: 0, dy: 0 };
       const snapCoord = { x: machPos.x + camOffset.dx, y: machPos.y + camOffset.dy };
@@ -1538,18 +1500,13 @@ export default function CameraPanel({
       if (Math.abs(dx) < 0.005 && Math.abs(dy) < 0.005) {
         const last = lastAutoSavedRef.current;
         if (last && Math.hypot(snapCoord.x - last.position.x, snapCoord.y - last.position.y) < CORR_DIST) {
-          // Machine is still near the last auto-saved fiducial — user is correcting it.
-          // Overwrite that slot directly without advancing the arm dropdown.
-          console.log(`[SnapToFiducial] Correcting ${last.id} — overwriting same slot, arm stays.`);
           overwriteFiducialById(last.id, snapCoord);
           lastAutoSavedRef.current = null;
           return;
         }
         if (Date.now() < saveBlockRef.current) {
-          console.log('[SnapToFiducial] Save blocked — move to next fiducial first.');
           return;
         }
-        console.log('[SnapToFiducial] Already centred — saving coordinate.');
         saveFiducialCoordinate(snapCoord);
         return;
       }
@@ -1560,7 +1517,6 @@ export default function CameraPanel({
       if (lastJog && Math.hypot(snapCoord.x - lastJog.position.x, snapCoord.y - lastJog.position.y) < CORR_DIST) {
         correctionTargetRef.current = { id: lastJog.id, position: { ...snapCoord } };
         lastAutoSavedRef.current = null;
-        console.log(`[SnapToFiducial] Correction jog for ${lastJog.id} — next convergence will overwrite same slot.`);
       }
 
       const cmds = jogRel({ dx, dy, feed: 800 });
@@ -1596,26 +1552,11 @@ export default function CameraPanel({
       setQualityResult(result);
 
       if (result) {
-        console.log('Quality analysis:', result);
       }
     } catch (error) {
       console.error('Quality analysis failed:', error);
     }
   };
-
-  // Jog nozzle by the camera-to-nozzle offset so it aligns over the fiducial center.
-  // Called once after a successful one-shot fiducial detection.
-  // const jogCameraToNozzle = async (offset) => {
-  //   if (!offset || (offset.dx === 0 && offset.dy === 0)) return;
-  //   // console.log("Offset:", offset);
-  //   const cmds = jogRel({ dx: offset.dx, dy: offset.dy, feed: 1000 });
-  //   if (window.serial && window.serial.writeLine) {
-  //     for (const cmd of cmds) await window.serial.writeLine(cmd);
-  //     console.log(`[FiducialOffset] Nozzle jogged ΔX:${offset.dx.toFixed(3)} ΔY:${offset.dy.toFixed(3)} mm → nozzle now over fiducial center`);
-  //   } else {
-  //     console.warn('[FiducialOffset] Serial not connected — offset jog skipped. Would have jogged:', offset);
-  //   }
-  // };
 
   const jogCameraToNozzle = async (offset) => {
     if (!offset || (offset.dx === 0 && offset.dy === 0)) return;

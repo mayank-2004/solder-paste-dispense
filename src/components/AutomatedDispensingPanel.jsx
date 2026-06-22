@@ -33,7 +33,7 @@ function spcLoad() {
   try { return JSON.parse(localStorage.getItem(SPC_KEY) || '{"jobs":[]}'); }
   catch { return { jobs: [] }; }
 }
-
+vf
 function spcAppend(dotResults, totalPads) {
   if (!dotResults || dotResults.length === 0) return;
   const data = spcLoad();
@@ -130,10 +130,6 @@ export default function AutomatedDispensingPanel({
   const [regIndex, setRegIndex] = useState(0);
   // const [currentPos, setCurrentPos] = useState({ x: 0, y: 0, z: 0 }); // Replaced by prop
   const [jogStep, setJogStep] = useState(1);
-
-  // Fine-tune residual offset correction (applied on top of everything else)
-  // const [fineTuneX, setFineTuneX] = useState(() => parseFloat(localStorage.getItem('fineTuneX') || '0'));
-  // const [fineTuneY, setFineTuneY] = useState(() => parseFloat(localStorage.getItem('fineTuneY') || '0'));
 
   // Pad Alignment Preview state
   const [previewPadIdx, setPreviewPadIdx] = useState(0);
@@ -322,8 +318,6 @@ export default function AutomatedDispensingPanel({
     return () => window.removeEventListener('serial:connection-lost', onConnectionLost);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // useEffect(() => { localStorage.setItem('fineTuneX', String(fineTuneX)); }, [fineTuneX]);
-  // useEffect(() => { localStorage.setItem('fineTuneY', String(fineTuneY)); }, [fineTuneY]);
   useEffect(() => { localStorage.setItem('calibCaptures', JSON.stringify(calibCaptures)); }, [calibCaptures]);
 
   // Persist key settings to file so they survive Chromium profile resets
@@ -735,7 +729,6 @@ export default function AutomatedDispensingPanel({
         // Only runs if board has fiducials with BOTH design AND machine coords solved
         const solvedFiducials = board.fiducials?.filter(f => f.design && f.machine) || [];
         if (applyXf && dynamicPanelCorrection && solvedFiducials.length >= 2) {
-          console.log(`[Dynamic Vision] Auto-correcting board: ${board.name} using ${solvedFiducials.length} fiducials`);
           setJobStage('auto-aligning');
 
           let updatedMachineFiducials = [];
@@ -800,9 +793,6 @@ export default function AutomatedDispensingPanel({
         } else if (applyXf && dynamicPanelCorrection && solvedFiducials.length < 2) {
           console.log(`[Dynamic Vision] Skipping for board "${board.name}" — need ≥2 solved fiducials, got ${solvedFiducials.length}. Using baseline transform.`);
         }
-
-        console.log(`--- DISPENSING ${board.name.toUpperCase()} ---`);
-        console.log("Active Transform (XF):", transform);
 
         // Safety Check per board
         const startRef = transform ? applyTransform(transform, refPoint || { x: 0, y: 0 }) : (refPoint || { x: 0, y: 0 });
@@ -1741,7 +1731,6 @@ export default function AutomatedDispensingPanel({
                     const filtered = prev.filter(c => c.padIdx !== previewPadIdx);
                     return [...filtered, newCapture];
                   });
-                  console.log(`[CalibCapture] Pad ${previewPadIdx + 1}: predicted=(${machineCoord.x.toFixed(3)},${machineCoord.y.toFixed(3)}) actual=(${machinePosition.x.toFixed(3)},${machinePosition.y.toFixed(3)}) correction=(${newCapture.delta.x.toFixed(3)},${newCapture.delta.y.toFixed(3)})`);
                 };
 
                 return (

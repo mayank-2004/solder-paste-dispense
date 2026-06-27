@@ -9,6 +9,7 @@ import { getZOffsetForPoint } from './BedCalibrationPanel.jsx';
 import PasteGauge from './PasteGauge.jsx';
 import MaintenanceManager from './MaintenanceManager.jsx';
 import { NozzleMaintenanceManager, computeNozzleHealth } from '../lib/maintenance/nozzleMaintenance.js';
+import { useAdmin } from './AdminContext.jsx';
 
 const nozzleMaintenance = new NozzleMaintenanceManager();
 
@@ -33,7 +34,7 @@ function spcLoad() {
   try { return JSON.parse(localStorage.getItem(SPC_KEY) || '{"jobs":[]}'); }
   catch { return { jobs: [] }; }
 }
-vf
+
 function spcAppend(dotResults, totalPads) {
   if (!dotResults || dotResults.length === 0) return;
   const data = spcLoad();
@@ -87,6 +88,7 @@ export default function AutomatedDispensingPanel({
   selectedOrigin,
   pressureSettings,
   speedSettings,
+  setSpeedSettings,
   boardOutline,
   useSafePathPlanning = false,
   setUseSafePathPlanning,
@@ -113,6 +115,8 @@ export default function AutomatedDispensingPanel({
   toolOffset = { dx: 0, dy: 0 }
 }) {
   const [isJobRunning, setIsJobRunning] = useState(false);
+  const isAdmin = useAdmin();
+
   const isJobRunningRef = useRef(false);
   const [resumeFromPad, setResumeFromPad] = useState(0);
   const globalPointCountRef = useRef(0);
@@ -820,11 +824,11 @@ export default function AutomatedDispensingPanel({
             tp = applyTransform(panelXf, panelSpacePt);
             // Optional per-board local correction on top (if transform != panelXf)
             if (transform && transform !== panelXf) tp = applyTransform(transform, tp);
-            await sendGcodeWait(`G1 X${(tp.x + calibCorrection.x).toFixed(3)} Y${(tp.y + calibCorrection.y).toFixed(3)} F${speedSettings.travelSpeed || 6000}`);
+            await sendGcodeWait(`G1 X${(tp.x + calibCorrection.x).toFixed(3)} Y${(tp.y + calibCorrection.y).toFixed(3)} F${speedSettings.travelSpeed ?? 6000}`);
             p = { ...p, x: tp.x, y: tp.y };
           } else if (transform) {
             tp = applyTransform(transform, p);
-            await sendGcodeWait(`G1 X${(tp.x + calibCorrection.x).toFixed(3)} Y${(tp.y + calibCorrection.y).toFixed(3)} F${speedSettings.travelSpeed || 6000}`);
+            await sendGcodeWait(`G1 X${(tp.x + calibCorrection.x).toFixed(3)} Y${(tp.y + calibCorrection.y).toFixed(3)} F${speedSettings.travelSpeed ?? 6000}`);
             p = { ...p, x: tp.x, y: tp.y };
           } else {
             // No transform: align manually using the effective origin
@@ -877,8 +881,8 @@ export default function AutomatedDispensingPanel({
               beadAxis: dispenseMode.axis,
               zWork,
               zSafe: safeTravelHeight,
-              feedXY: speedSettings.travelSpeed || 6000,
-              feedZ: speedSettings.dispenseSpeed || 300,
+              feedXY: speedSettings.travelSpeed ?? 6000,
+              feedZ: speedSettings.dispenseSpeed ?? 300,
               feedBead: beadFeedRate,
               pressure,
             });
@@ -887,8 +891,8 @@ export default function AutomatedDispensingPanel({
               x: finalX, y: finalY,
               zWork,
               zSafe: safeTravelHeight,
-              feedXY: speedSettings.travelSpeed || 6000,
-              feedZ: speedSettings.dispenseSpeed || 300,
+              feedXY: speedSettings.travelSpeed ?? 6000,
+              feedZ: speedSettings.dispenseSpeed ?? 300,
               pressure,
               dwellMs: dwell,
             });
@@ -903,7 +907,7 @@ export default function AutomatedDispensingPanel({
           // ── Post-dispense dot verification ─────────────────────────────
           if (enableDotVerification && tp) {
             // Move camera back over the just-dispensed pad
-            await sendGcodeWait(`G1 X${(tp.x + calibCorrection.x).toFixed(3)} Y${(tp.y + calibCorrection.y).toFixed(3)} F${speedSettings.travelSpeed || 6000}`);
+            await sendGcodeWait(`G1 X${(tp.x + calibCorrection.x).toFixed(3)} Y${(tp.y + calibCorrection.y).toFixed(3)} F${speedSettings.travelSpeed ?? 6000}`);
             await sendGcodeWait('M400');
             await new Promise(r => setTimeout(r, 400)); // settle
             setDotCheckResults(prev => [...prev, { padIndex: globalPointCount, passed: true, diameter_mm: 0, confidence: 0, skipped: true }]);
@@ -1214,6 +1218,16 @@ export default function AutomatedDispensingPanel({
             </label>
             <hr style={{ borderColor: '#444', margin: '12px 0' }} />
             <h5>G-Code Generation Config</h5>
+            {!isAdmin && (
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: 8,
+                background: 'rgba(245,166,35,0.08)', border: '1px solid rgba(245,166,35,0.3)',
+                borderRadius: 6, padding: '7px 12px', marginBottom: 8, fontSize: '0.8rem', color: '#e3b341',
+              }}>
+                🔒 Settings locked — switch to Admin mode to edit
+              </div>
+            )}
+            <fieldset disabled={!isAdmin} style={{ border: 'none', padding: 0, margin: 0 }}>
             <div className="grid2" style={{ gap: '8px', fontSize: '0.9em' }}>
               <label style={{ gridColumn: '1 / -1' }}>
                 Paste Viscosity (Presets):
@@ -1281,6 +1295,20 @@ export default function AutomatedDispensingPanel({
                 Bead Speed (mm/min):
                 <input type="number" step="50" min="50" max="3000" value={beadFeedRate} onChange={e => setBeadFeedRate(Number(e.target.value))} style={{ width: '100%', marginTop: '4px' }} />
               </label>
+              <label>
+                Travel Speed (mm/min):
+                <input type="number" step="500" min="500" max="15000" value={speedSettings.travelSpeed ?? 6000}
+                  onChange={e => setSpeedSettings(prev => ({ ...prev, travelSpeed: Number(e.target.value) }))}
+                  style={{ width: '100%', marginTop: '4px' }} />
+                <small style={{ color: '#888' }}>XY moves between pads. Typical: 4000–8000</small>
+              </label>
+              <label>
+                Z Speed (mm/min):
+                <input type="number" step="50" min="50" max="2000" value={speedSettings.dispenseSpeed ?? 300}
+                  onChange={e => setSpeedSettings(prev => ({ ...prev, dispenseSpeed: Number(e.target.value) }))}
+                  style={{ width: '100%', marginTop: '4px' }} />
+                <small style={{ color: '#888' }}>Z approach/retract speed. Typical: 200–500</small>
+              </label>
               {purgeEnabled && (
                 <label>
                   Purge Duration (ms):
@@ -1329,6 +1357,7 @@ export default function AutomatedDispensingPanel({
                 <span>Purge nozzle before job</span>
               </label>
             </div>
+            </fieldset>
 
             {/* ── Recipe Manager ──────────────────────────────────────────── */}
             <details open style={{ marginTop: 14 }}>
@@ -1354,7 +1383,7 @@ export default function AutomatedDispensingPanel({
                   <button
                     className="btn"
                     style={{ fontSize: '0.82em', padding: '4px 12px', whiteSpace: 'nowrap' }}
-                    disabled={!recipeName.trim()}
+                    disabled={!recipeName.trim() || !isAdmin}
                     onClick={handleSaveRecipe}
                     title="Save current settings as a recipe"
                   >💾 Save</button>
@@ -1379,9 +1408,10 @@ export default function AutomatedDispensingPanel({
                           onClick={() => handleLoadRecipe(name)}
                         >Load</button>
                         <button
-                          style={{ fontSize: '0.75em', padding: '2px 6px', background: 'transparent', color: '#f85149', border: '1px solid #f8514966', borderRadius: 3, cursor: 'pointer', flexShrink: 0 }}
+                          style={{ fontSize: '0.75em', padding: '2px 6px', background: 'transparent', color: '#f85149', border: '1px solid #f8514966', borderRadius: 3, cursor: 'pointer', flexShrink: 0, opacity: isAdmin ? 1 : 0.3 }}
                           onClick={() => handleDeleteRecipe(name)}
-                          title={`Delete "${name}"`}
+                          disabled={!isAdmin}
+                          title={isAdmin ? `Delete "${name}"` : 'Admin mode required'}
                         >✕</button>
                       </div>
                     ))}

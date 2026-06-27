@@ -111,3 +111,12 @@ WiFi (works but a dropped packet during fiducial servo loop adds latency)
 Recommendation: Ethernet for a production machine
 4. Mounting
 The Pi needs to be physically mounted on or near the dispenser so the camera cable reaches the PCB area.
+
+
+
+
+
+
+
+Python vision server.py file - 
+For the packaged build, you'll need to include python-vision/ in extraResources in your electron-builder config so it lands in process.resourcesPath.

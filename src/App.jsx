@@ -31,6 +31,7 @@ import { useGerberFiles } from "./hooks/useGerberFiles.js";
 import AppHeader from "./components/AppHeader.jsx";
 import { ToastContainer, ConfirmDialog } from "./components/ToastNotification.jsx";
 import { toast, showConfirm } from "./lib/toast.js";
+import { AdminContext } from "./components/AdminContext.jsx";
 
 function calculatePadCenter(p) {
   if (typeof p.x === "number" && typeof p.y === "number") {
@@ -367,11 +368,14 @@ export default function App() {
     }
   });
 
+  const [isAdmin, setIsAdmin] = useState(false);
+
   const [speedSettings, setSpeedSettings] = useState(() => {
     try {
-      return JSON.parse(localStorage.getItem("speedSettings") || '{"autoAdjust": true, "globalMultiplier": 1.0}');
-    } catch (error) {
-      return { autoAdjust: true, globalMultiplier: 1.0 };
+      const saved = JSON.parse(localStorage.getItem("speedSettings") || 'null');
+      return { travelSpeed: 6000, dispenseSpeed: 300, ...saved };
+    } catch {
+      return { travelSpeed: 6000, dispenseSpeed: 300 };
     }
   });
 
@@ -1729,6 +1733,7 @@ export default function App() {
   const mPos = livePreview.machinePosition || machinePos || { x: 0, y: 0, z: 0 };
 
   return (
+    <AdminContext.Provider value={isAdmin}>
     <div id="root" onDragOver={(e) => e.preventDefault()} onDrop={onDrop}>
 
       {/* ── TOP HEADER BAR ─────────────────────────────────── */}
@@ -1738,6 +1743,9 @@ export default function App() {
         isEmergencyStopped={isEmergencyStopped}
         onStop={triggerEmergencyStop}
         onReset={resetEmergencyStop}
+        isAdmin={isAdmin}
+        onUnlock={() => setIsAdmin(true)}
+        onLock={() => setIsAdmin(false)}
       />
 
       <ToastContainer />
@@ -1973,6 +1981,7 @@ export default function App() {
                     jobStatistics={jobStatistics}
                     pressureSettings={pressureSettings}
                     speedSettings={speedSettings}
+                    setSpeedSettings={setSpeedSettings}
                     referencePoint={referencePoint}
                     selectedOrigin={effectiveOrigin}
                     fiducials={fiducials}
@@ -2228,6 +2237,7 @@ export default function App() {
                 selectedOrigin={effectiveOrigin}
                 pressureSettings={pressureSettings}
                 speedSettings={speedSettings}
+                setSpeedSettings={setSpeedSettings}
                 boardOutline={boardOutline}
                 useSafePathPlanning={useSafePathPlanning}
                 setUseSafePathPlanning={setUseSafePathPlanning}
@@ -2272,5 +2282,6 @@ export default function App() {
         </div>
       </div>
     </div>
+    </AdminContext.Provider>
   );
 }

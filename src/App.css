@@ -95,6 +95,63 @@
   flex-shrink: 0;
 }
 
+/* ── Mode (Operator / Admin) button ────────────────────────── */
+.mode-btn-group {
+  display: flex;
+  align-items: center;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  border: 1px solid var(--border-primary);
+  flex-shrink: 0;
+}
+
+.mode-btn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0 12px;
+  height: 30px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  font-family: var(--font-main);
+  transition: background 0.15s, color 0.15s;
+  white-space: nowrap;
+}
+
+.mode-btn.mode-operator {
+  color: #8b949e;
+  background: rgba(139,148,158,0.06);
+}
+.mode-btn.mode-operator:hover {
+  background: rgba(139,148,158,0.14);
+  color: #e6edf3;
+}
+
+.mode-btn.mode-admin {
+  color: #3fb950;
+  background: rgba(63,185,80,0.1);
+}
+.mode-btn.mode-admin:hover {
+  background: rgba(63,185,80,0.18);
+}
+
+.mode-btn.mode-changepin {
+  color: #8b949e;
+  background: transparent;
+  border-left: 1px solid var(--border-primary);
+  padding: 0 10px;
+  font-size: 0.8rem;
+}
+.mode-btn.mode-changepin:hover {
+  background: var(--bg-hover);
+  color: var(--text-bright);
+}
+
 /* ── Main Row (Sidebar + Content) ───────────────────────── */
 .app-body {
   flex: 1;

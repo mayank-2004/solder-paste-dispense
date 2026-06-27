@@ -1,12 +1,81 @@
 const { app, BrowserWindow, ipcMain } = require('electron');
 const path = require('path');
 const fs = require('fs');
+const { spawn } = require('child_process');
 const isDev = !app.isPackaged;
 const { SerialPort, ReadlineParser } = require('serialport');
 
 let win;
 let serial = { port: null, parser: null };
 let intentionalClose = false; // set true before operator-initiated close so the 'close' event is not treated as a cable pull
+
+// -------- Python Vision Server --------
+let visionProc = null;
+let visionStopping = false;
+let visionRestartCount = 0;
+const VISION_MAX_RESTARTS = 3;
+const VISION_MIN_UPTIME_MS = 5000; // treat exits within 5 s as crash (not normal shutdown)
+
+function getVisionServerPath() {
+  if (isDev) return path.join(__dirname, '..', 'python-vision', 'server.py');
+  return path.join(process.resourcesPath, 'python-vision', 'server.py');
+}
+
+function startVisionServer() {
+  if (visionStopping) return;
+  const serverScript = getVisionServerPath();
+  if (!fs.existsSync(serverScript)) {
+    console.warn('[vision] server.py not found at', serverScript, '— skipping auto-start');
+    return;
+  }
+
+  const pythonExe = process.platform === 'win32' ? 'python' : 'python3';
+  console.log(`[vision] Spawning ${pythonExe} ${serverScript} (attempt ${visionRestartCount + 1})`);
+  const startedAt = Date.now();
+
+  visionProc = spawn(pythonExe, [serverScript], {
+    cwd: path.dirname(serverScript),
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+
+  visionProc.stdout.on('data', d => process.stdout.write(`[vision] ${d}`));
+  visionProc.stderr.on('data', d => process.stderr.write(`[vision] ${d}`));
+
+  visionProc.on('error', err => {
+    console.error('[vision] Failed to start:', err.message,
+      err.code === 'ENOENT' ? '(Python not found in PATH — install Python and required packages)' : '');
+    visionProc = null;
+  });
+
+  visionProc.on('exit', (code, signal) => {
+    if (visionStopping) return;
+    const uptime = Date.now() - startedAt;
+    console.log(`[vision] Exited — code=${code} signal=${signal} uptime=${uptime}ms`);
+    visionProc = null;
+
+    const isCrash = uptime < VISION_MIN_UPTIME_MS;
+    if (isCrash) {
+      visionRestartCount++;
+      if (visionRestartCount > VISION_MAX_RESTARTS) {
+        console.error(`[vision] Crashed ${visionRestartCount} times — giving up. Fix Python dependencies and restart the app.`);
+        return;
+      }
+    } else {
+      visionRestartCount = 0; // reset counter after a healthy run
+    }
+
+    console.log('[vision] Restarting in 3 s…');
+    setTimeout(startVisionServer, 3000);
+  });
+}
+
+function stopVisionServer() {
+  visionStopping = true;
+  if (visionProc) {
+    visionProc.kill();
+    visionProc = null;
+  }
+}
 
 function createWindow() {
   win = new BrowserWindow({
@@ -27,7 +96,13 @@ function createWindow() {
   }
 }
 
-app.whenReady().then(createWindow);
+app.whenReady().then(() => {
+  // In dev, `npm run dev` starts Python via concurrently — don't spawn a second instance.
+  // In production (packaged), Electron is the sole entry point so we own the server lifecycle.
+  if (!isDev) startVisionServer();
+  createWindow();
+});
+app.on('will-quit', stopVisionServer);
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
 app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
 

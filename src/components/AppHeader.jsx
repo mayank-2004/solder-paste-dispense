@@ -1,4 +1,10 @@
-export default function AppHeader({ mPos, isSerialConnected, isEmergencyStopped, onStop, onReset }) {
+import { useState } from 'react';
+import { PinUnlockModal, ChangePinModal } from './AdminAuth.jsx';
+
+export default function AppHeader({ mPos, isSerialConnected, isEmergencyStopped, onStop, onReset, isAdmin, onUnlock, onLock }) {
+  const [showUnlock, setShowUnlock] = useState(false);
+  const [showChangePin, setShowChangePin] = useState(false);
+
   return (
     <header className="app-header">
       <div className="app-logo">
@@ -30,6 +36,30 @@ export default function AppHeader({ mPos, isSerialConnected, isEmergencyStopped,
       </div>
       <div className="header-spacer" />
       <div className="header-right">
+        {/* Mode indicator + lock/unlock */}
+        <div className="mode-btn-group">
+          <button
+            className={`mode-btn ${isAdmin ? 'mode-admin' : 'mode-operator'}`}
+            onClick={() => isAdmin ? onLock() : setShowUnlock(true)}
+            title={isAdmin ? 'Click to lock — return to Operator mode' : 'Click to unlock Admin mode'}
+          >
+            <span className="mode-icon">{isAdmin ? '🔓' : '🔒'}</span>
+            <span className="mode-label">{isAdmin ? 'ADMIN' : 'OPERATOR'}</span>
+          </button>
+          {isAdmin && (
+            <button
+              className="mode-btn mode-changepin"
+              onClick={() => setShowChangePin(true)}
+              title="Change admin PIN"
+              style={{color: "#58a6ff"}}
+            >
+              Change PIN
+            </button>
+          )}
+        </div>
+
+        <div className="header-divider" />
+
         <div className={`status-pill ${isSerialConnected ? 'connected' : 'disconnected'}`}>
           <span className="pill-dot" />
           {isSerialConnected ? 'CONNECTED' : 'OFFLINE'}
@@ -43,6 +73,16 @@ export default function AppHeader({ mPos, isSerialConnected, isEmergencyStopped,
           {isEmergencyStopped ? 'RESET' : 'E-STOP'}
         </button>
       </div>
+
+      {showUnlock && (
+        <PinUnlockModal
+          onSuccess={() => { onUnlock(); setShowUnlock(false); }}
+          onClose={() => setShowUnlock(false)}
+        />
+      )}
+      {showChangePin && (
+        <ChangePinModal onClose={() => setShowChangePin(false)} />
+      )}
     </header>
   );
 }

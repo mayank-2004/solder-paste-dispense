@@ -14,7 +14,6 @@ export function header({ units = "mm", absolute = true } = {}) {
   const lines = [];
   lines.push(units === "in" ? "G20" : "G21");
   lines.push(absolute ? "G90" : "G91");
-  lines.push("M82"); // absolute extrusion (safe no-op if R != E)
   return lines;
 }
 
@@ -78,9 +77,9 @@ export function dispensePoint({
   zSafe = 5,
   feedXY = 1500,
   feedZ = 500,
-  pressure = 0,
   dwellMs = 0,
-  valvePin = 4,
+  valveOnCmd = 'M42 P4 S255',
+  valveOffCmd = 'M42 P4 S0',
   axisMap = defaultAxisMap
 }) {
   const cmds = [];
@@ -90,14 +89,14 @@ export function dispensePoint({
   // Move down to work height
   cmds.push(...moveAbs({ z: zWork, feed: feedZ }, axisMap));
 
-  // Pressure ON
-  if (pressure > 0) cmds.push(`M42 P${valvePin} S${Math.round(pressure)}`);
+  // Valve ON
+  cmds.push(valveOnCmd);
 
   // Dwell
   if (dwellMs > 0) cmds.push(...dwell(dwellMs));
 
-  // Pressure OFF
-  if (pressure > 0) cmds.push(`M42 P${valvePin} S0`);
+  // Valve OFF
+  cmds.push(valveOffCmd);
 
   // Retract to safe height
   cmds.push(...moveAbs({ z: zSafe, feed: feedZ }, axisMap));
@@ -122,8 +121,8 @@ export function dispenseBead({
   feedXY = 1500,
   feedZ = 500,
   feedBead = 500,
-  pressure = 0,
-  valvePin = 4,
+  valveOnCmd = 'M42 P4 S255',
+  valveOffCmd = 'M42 P4 S0',
   axisMap = defaultAxisMap
 }) {
   const cmds = [];
@@ -139,11 +138,11 @@ export function dispenseBead({
   // Lower to work height
   cmds.push(...moveAbs({ z: zWork, feed: feedZ }, axisMap));
   // Valve ON
-  if (pressure > 0) cmds.push(`M42 P${valvePin} S${Math.round(pressure)}`);
+  cmds.push(valveOnCmd);
   // Sweep to bead end with valve open
   cmds.push(...moveAbs({ x: endX, y: endY, feed: feedBead }, axisMap));
   // Valve OFF
-  if (pressure > 0) cmds.push(`M42 P${valvePin} S0`);
+  cmds.push(valveOffCmd);
   // Retract to safe height
   cmds.push(...moveAbs({ z: zSafe, feed: feedZ }, axisMap));
 

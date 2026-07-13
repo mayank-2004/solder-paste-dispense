@@ -191,6 +191,7 @@ export default function App() {
     originStateRef.current = { xf, applyXf, selectedOrigin, pcbOriginOffset };
   }, [xf, applyXf, selectedOrigin, pcbOriginOffset]);
 
+
   const [isHomed, setIsHomed] = useState(false);
   const [isJobRunning, setIsJobRunning] = useState(false);
 
@@ -367,8 +368,8 @@ export default function App() {
       return { viscosity: "medium", customPressure: 25, customDwellTime: 120 };
     }
   });
-
-  const [isAdmin, setIsAdmin] = useState(false);
+  // Operator mode disabled by user request - hardcoded to admin access
+  const [isAdmin, setIsAdmin] = useState(true);
 
   const [speedSettings, setSpeedSettings] = useState(() => {
     try {
@@ -461,6 +462,11 @@ export default function App() {
   const changeSide = (s, skip = false) => {
     changeSideFn(s, layers, skip);
     reinitSideState(s, layers);
+    setSelectedMm(null);
+    setGeneratedPath(null);
+    setSelectedPadIndices([]);
+    setPadDistances([]);
+    setMultiSelectMode(false);
   };
 
   const pickFiles = async (e) => handleFiles(e.target.files);

@@ -36,7 +36,7 @@ export default function AppHeader({ mPos, isSerialConnected, isEmergencyStopped,
       </div>
       <div className="header-spacer" />
       <div className="header-right">
-        {/* Mode indicator + lock/unlock */}
+        {/* Mode indicator + lock/unlock - Disabled per user request
         <div className="mode-btn-group">
           <button
             className={`mode-btn ${isAdmin ? 'mode-admin' : 'mode-operator'}`}
@@ -57,6 +57,7 @@ export default function AppHeader({ mPos, isSerialConnected, isEmergencyStopped,
             </button>
           )}
         </div>
+        */}
 
         <div className="header-divider" />
 

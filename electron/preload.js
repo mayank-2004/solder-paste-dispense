@@ -19,9 +19,16 @@ contextBridge.exposeInMainWorld('serial', {
         ipcRenderer.on('serial:data', subscription);
         return () => ipcRenderer.removeListener('serial:data', subscription);
     },
-    onPortClosed: (handler) => {
+    onDisconnect: (handler) => {
+        // Fires when USB cable is pulled (native SerialPort 'close' event)
         const subscription = () => handler();
-        ipcRenderer.on('serial:port-closed', subscription);
-        return () => ipcRenderer.removeListener('serial:port-closed', subscription);
+        ipcRenderer.on('serial:disconnected', subscription);
+        return () => ipcRenderer.removeListener('serial:disconnected', subscription);
+    },
+    onPortAppeared: (handler) => {
+        // Fires when the last-used port reappears after a cable pull
+        const subscription = (_evt, info) => handler(info);
+        ipcRenderer.on('serial:port-appeared', subscription);
+        return () => ipcRenderer.removeListener('serial:port-appeared', subscription);
     }
 });

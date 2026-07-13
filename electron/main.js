@@ -7,7 +7,46 @@ const { SerialPort, ReadlineParser } = require('serialport');
 
 let win;
 let serial = { port: null, parser: null };
-let intentionalClose = false; // set true before operator-initiated close so the 'close' event is not treated as a cable pull
+let intentionalClose = false;   // flag to distinguish programmatic close from cable pull
+let lastConnectedPath = null;   // path of the most recently opened port
+let lastConnectedBaud = 250000; // baud rate used when last opened
+let portWatcherTimer = null;    // setInterval handle for reappearance polling
+let keepAliveTimer = null;      // setInterval handle for USB keepalive pings
+
+function stopKeepAlive() {
+  if (keepAliveTimer) { clearInterval(keepAliveTimer); keepAliveTimer = null; }
+}
+
+function startKeepAlive() {
+  stopKeepAlive();
+  keepAliveTimer = setInterval(() => {
+    if (serial.port?.isOpen) {
+      serial.port.write('\n', () => {}); // empty newline — Marlin ignores it, prevents Windows USB suspend
+    } else {
+      stopKeepAlive();
+    }
+  }, 30000); // every 30 s
+}
+
+function stopPortWatcher() {
+  if (portWatcherTimer) { clearInterval(portWatcherTimer); portWatcherTimer = null; }
+}
+
+function startPortWatcher() {
+  stopPortWatcher();
+  portWatcherTimer = setInterval(async () => {
+    if (!lastConnectedPath) { stopPortWatcher(); return; }
+    try {
+      const ports = await SerialPort.list();
+      if (ports.some(p => p.path === lastConnectedPath)) {
+        stopPortWatcher();
+        if (win && !win.isDestroyed()) {
+          win.webContents.send('serial:port-appeared', { path: lastConnectedPath, baudRate: lastConnectedBaud });
+        }
+      }
+    } catch { /* ignore list errors during polling */ }
+  }, 2000);
+}
 
 // -------- Python Vision Server --------
 let visionProc = null;
@@ -127,30 +166,60 @@ ipcMain.handle('serial:list', async () => {
   }
 });
 
-ipcMain.handle('serial:open', async (e, { path: portPath, baudRate = 115200 }) => {
+ipcMain.handle('serial:open', async (e, { path: portPath, baudRate = 250000 }) => {
   if (!portPath || typeof portPath !== 'string') {
     throw new Error('No serial "path" provided. Pick a port before connecting.');
   }
+  stopPortWatcher(); // stop watching — we're actively connecting now
+  lastConnectedPath = portPath;
+  lastConnectedBaud = baudRate;
   // close previous if open
   if (serial.port?.isOpen) {
     await new Promise(r => serial.port.close(() => r()));
   }
   await new Promise((resolve, reject) => {
-    const port = new SerialPort({ path: portPath, baudRate }, (err) => {
+    // HACK FOR ARDUINO MEGA CLONE BOOTLOADER BUG:
+    // If the target is 250000, the STK500v2 bootloader (running at 115200) receives garbage
+    // and freezes for 5-6 minutes. To fix this, we open at 115200 baud so the bootloader
+    // cleanly times out and exits in ~2 seconds. Then we dynamically update the baud rate 
+    // to 250000 without toggling DTR, so the board doesn't reset again!
+    const isMegaBypass = Number(baudRate) === 250000;
+    const initialBaud = isMegaBypass ? 115200 : Number(baudRate);
+
+    const port = new SerialPort({ path: portPath, baudRate: initialBaud }, (err) => {
       if (err) return reject(err);
-      serial.port = port;
-      serial.parser = port.pipe(new ReadlineParser({ delimiter: '\n' }));
-      serial.parser.on('data', (line) => {
-        win.webContents.send('serial:data', line.toString());
-      });
-      // Forward unexpected port closes (cable pull) to the renderer immediately.
-      port.on('close', () => {
-        if (!intentionalClose) {
-          win.webContents.send('serial:port-closed');
-        }
-        intentionalClose = false;
-      });
-      resolve();
+
+      const setupPort = () => {
+        serial.port = port;
+        serial.parser = port.pipe(new ReadlineParser({ delimiter: '\n' }));
+        serial.parser.on('data', (line) => {
+          if (win && !win.isDestroyed()) win.webContents.send('serial:data', line.toString());
+        });
+        // Native disconnect detection: fires immediately when USB cable is pulled
+        port.on('close', () => {
+          stopKeepAlive();
+          if (!intentionalClose && serial.port) {
+            serial.port = null;
+            serial.parser = null;
+            if (win && !win.isDestroyed()) win.webContents.send('serial:disconnected');
+            startPortWatcher(); // begin polling for port to reappear
+          }
+        });
+        startKeepAlive();
+        resolve();
+      };
+
+      if (isMegaBypass) {
+        // Wait 3.5 seconds for the bootloader to cleanly exit at 115200 baud
+        setTimeout(() => {
+          port.update({ baudRate: 250000 }, (updateErr) => {
+            if (updateErr) return reject(updateErr);
+            setupPort();
+          });
+        }, 3500);
+      } else {
+        setupPort();
+      }
     });
   });
   return true;
@@ -158,11 +227,14 @@ ipcMain.handle('serial:open', async (e, { path: portPath, baudRate = 115200 }) =
 
 ipcMain.handle('serial:close', async () => {
   if (!serial.port) return true;
+  stopPortWatcher(); // operator disconnected intentionally — don't auto-reconnect
+  stopKeepAlive();
   intentionalClose = true;
   await new Promise((resolve) => {
     serial.port.close(() => {
       serial.port = null;
       serial.parser = null;
+      intentionalClose = false;
       resolve();
     });
   });

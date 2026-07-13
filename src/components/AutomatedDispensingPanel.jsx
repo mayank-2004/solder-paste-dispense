@@ -152,8 +152,8 @@ export default function AutomatedDispensingPanel({
     : { x: 0, y: 0 };
 
   // Machine Configuration State
-  const [valveOnCmd, setValveOnCmd] = useState('M106 S255');
-  const [valveOffCmd, setValveOffCmd] = useState('M107');
+  const [valveOnCmd, setValveOnCmd] = useState('M42 P4 S255');
+  const [valveOffCmd, setValveOffCmd] = useState('M42 P4 S0');
   const [dispenseHeight, setDispenseHeight] = useState(0.5);
   const [safeTravelHeight, setSafeTravelHeight] = useState(5.0);
   const [viscosity, setViscosity] = useState('medium'); // low, medium, high
@@ -884,7 +884,8 @@ export default function AutomatedDispensingPanel({
               feedXY: speedSettings.travelSpeed ?? 6000,
               feedZ: speedSettings.dispenseSpeed ?? 300,
               feedBead: beadFeedRate,
-              pressure,
+              valveOnCmd,
+              valveOffCmd,
             });
           } else {
             cmds = dispensePoint({
@@ -893,8 +894,9 @@ export default function AutomatedDispensingPanel({
               zSafe: safeTravelHeight,
               feedXY: speedSettings.travelSpeed ?? 6000,
               feedZ: speedSettings.dispenseSpeed ?? 300,
-              pressure,
               dwellMs: dwell,
+              valveOnCmd,
+              valveOffCmd,
             });
           }
           for (const c of cmds) {
@@ -1030,12 +1032,12 @@ export default function AutomatedDispensingPanel({
     }
   };
 
-  const purgeNozzle = async (durationMs = purgeDurationMs, pressure = localPressure) => {
+  const purgeNozzle = async (durationMs = purgeDurationMs) => {
     setIsPurging(true);
     try {
-      await sendGcodeWait(`M42 P4 S${Math.round(pressure)}`);
+      await sendGcodeWait(valveOnCmd);
       await sendGcodeWait(`G4 P${Math.round(durationMs)}`, durationMs + 5000);
-      await sendGcodeWait('M42 P4 S0');
+      await sendGcodeWait(valveOffCmd);
       await sendGcodeWait('M400');
     } finally {
       setIsPurging(false);

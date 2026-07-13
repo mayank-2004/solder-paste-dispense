@@ -21,8 +21,14 @@ export function ToastContainer() {
       }
     };
 
+    const onDismiss = (e) => dismiss(e.detail.id);
+
     window.addEventListener('app:toast', onToast);
-    return () => window.removeEventListener('app:toast', onToast);
+    window.addEventListener('app:toast-dismiss', onDismiss);
+    return () => {
+      window.removeEventListener('app:toast', onToast);
+      window.removeEventListener('app:toast-dismiss', onDismiss);
+    };
   }, []);
 
   const dismiss = (id) => setToasts(prev => prev.filter(t => t.id !== id));

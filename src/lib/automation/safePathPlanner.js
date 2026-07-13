@@ -130,9 +130,9 @@ export class SafePathPlanner {
       });
 
       // Dispense
-      gcode.push('M42 P4 S25 ; Start dispensing');
+      gcode.push('M42 P4 S255 ; Valve ON');
       gcode.push('G4 P120 ; Dwell 120ms');
-      gcode.push('M42 P4 S0 ; Stop dispensing');
+      gcode.push('M42 P4 S0 ; Valve OFF');
       gcode.push('');
     });
 

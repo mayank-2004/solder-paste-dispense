@@ -150,8 +150,8 @@ export class DispensingSequencer {
       xf,
       applyXf,
       toolOffset = { dx: 0, dy: 0 },
-      valveOnCmd = 'M106 S255', // Default Ender-3 Fan ON
-      valveOffCmd = 'M107',     // Default Ender-3 Fan OFF
+      valveOnCmd = 'M42 P4 S255', // Digital output ON (Arduino Mega / Marlin M42)
+      valveOffCmd = 'M42 P4 S0',  // Digital output OFF
       dispenseHeight = 0.5,     // mm above board to dispense
       side = 'top',             // current board side
       boardWidth = 0            // for mirroring

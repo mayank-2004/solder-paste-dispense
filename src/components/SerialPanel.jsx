@@ -12,23 +12,29 @@ export default function SerialPanel({
 }) {
   const [ports, setPorts] = useState([]);
   const [path, setPath] = useState('');
-  const [baud, setBaud] = useState(115200);
+  const [baud, setBaud] = useState(250000);
+  const consoleEndRef = useRef(null);
   const [consoleLines, setConsoleLines] = useState([]);
   const [isHoming, setIsHoming] = useState(false);
-  const [isReconnecting, setIsReconnecting] = useState(false);
 
   const inputRef = useRef(null);
   const mPosRef = useRef(machinePosition);
   const hasReceivedPosRef = useRef(false);
   const hasConnectedOnceRef = useRef(false);
+  const marlinBootCbRef = useRef(null);
+  const statusQueryIntervalRef = useRef(null); // M114 polling interval
+  const bootToastIdRef = useRef(null);         // holds the waiting-for-boot toast ID
+  const bootFallbackRef = useRef(null);        // setTimeout handle — cleared on disconnect
+  const awaitingOkRef = useRef(null);          // one-shot callback fired on next Marlin 'ok'
+  const lateHomingCbRef = useRef(null);        // recovery callback for late 'start' signals
 
   // Auto-reconnect state
   const isIntentionalDisconnectRef = useRef(false); // true when operator clicks Disconnect
-  const reconnectIntervalRef = useRef(null);
-  const reconnectTargetRef = useRef('');  // port path to watch for
-  const baudRef = useRef(baud);           // current baud, safe inside interval closure
-  const pathRef = useRef(path);           // current path, safe inside event handler closure
-  const statusQueryIntervalRef = useRef(null); // M114 polling interval
+  const connectRef = useRef(null);     // always-current ref to connect fn for auto-reconnect
+  const isConnectedRef = useRef(isConnected);
+  useEffect(() => { isConnectedRef.current = isConnected; }, [isConnected]);
+  const baudRef = useRef(baud);
+  const pathRef = useRef(path);
 
   // Prop refs — stable handles for closures registered once
   const onConnectRef = useRef(onConnect);
@@ -58,24 +64,57 @@ export default function SerialPanel({
 
   useEffect(() => { refresh(); }, []);
 
+  // Native cable-pull detection — fires the moment SerialPort emits 'close' in main process
+  useEffect(() => {
+    if (!window.serial?.onDisconnect) return;
+    const remove = window.serial.onDisconnect(() => {
+      if (statusQueryIntervalRef.current) { clearInterval(statusQueryIntervalRef.current); statusQueryIntervalRef.current = null; }
+      setIsHoming(false);
+      hasReceivedPosRef.current = false;
+      marlinBootCbRef.current = null;  // cancel any pending boot detection
+      window.pauseSerialPolling = false;
+      const handler = onDisconnectRef.current;
+      if (handler) handler();
+    });
+    return remove;
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Auto-reconnect — when the port reappears after a cable pull, reconnect without operator click
+  useEffect(() => {
+    if (!window.serial?.onPortAppeared) return;
+    const remove = window.serial.onPortAppeared(({ path: portPath, baudRate }) => {
+      if (isConnectedRef.current) return; // already connected, ignore
+      setPath(portPath);
+      setBaud(baudRate);
+      toast.info('Machine detected — reconnecting automatically…');
+      setTimeout(() => { connectRef.current?.(); }, 1500);
+    });
+    return remove;
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   // ── Incoming serial data handler ─────────────────────────────────────────────
 
   useEffect(() => {
     const removeDataListener = window.serial.onData((line) => {
-      const ts = new Date().toISOString();
-      const isStatusPos = line.match(/X\s*:\s*([-\d.]+)/i) || line.match(/MPos:([-\d.]+)/);
-      if (!isStatusPos) {
-        setConsoleLines((prev) => [...prev, `[RECE] - ${ts} - ${line}`].slice(-500));
-      }
+      const ts = new Date().toLocaleTimeString();
+      const trimmed = line.trim();
 
+      // Show ALL lines in console — position lines shown dimmed so they don't dominate
+      const isStatusPos = trimmed.match(/^X\s*:/i) || trimmed.match(/^MPos:/);
+      setConsoleLines((prev) => [
+        ...prev,
+        { text: `[${ts}] ${trimmed}`, dim: !!isStatusPos }
+      ].slice(-500));
+
+      // Parse position
       let x = null, y = null, z = null;
-      const marlinMatch = line.match(/X\s*:\s*([-\d.]+).*?Y\s*:\s*([-\d.]+).*?Z\s*:\s*([-\d.]+)/i);
+      const marlinMatch = trimmed.match(/X\s*:\s*([-\d.]+).*?Y\s*:\s*([-\d.]+).*?Z\s*:\s*([-\d.]+)/i);
       if (marlinMatch) {
         x = parseFloat(marlinMatch[1]);
         y = parseFloat(marlinMatch[2]);
         z = parseFloat(marlinMatch[3]);
       } else {
-        const grblMatch = line.match(/MPos:([-\d.]+),([-\d.]+),([-\d.]+)/);
+        const grblMatch = trimmed.match(/MPos:([-\d.]+),([-\d.]+),([-\d.]+)/);
         if (grblMatch) {
           x = parseFloat(grblMatch[1]);
           y = parseFloat(grblMatch[2]);
@@ -88,147 +127,197 @@ export default function SerialPanel({
         if (onMachinePositionUpdate) onMachinePositionUpdate({ x, y, z });
       }
 
-      if (line.includes('z_min:')) {
-        const triggered = /z_min:\s*TRIGGERED/i.test(line);
+      if (trimmed.includes('z_min:')) {
+        const triggered = /z_min:\s*TRIGGERED/i.test(trimmed);
         window.dispatchEvent(new CustomEvent(
           triggered ? 'endstop-z-probe-triggered' : 'endstop-z-probe-open'
         ));
+      }
+
+      // ── Boot detection — same pattern as glue dispensing app ───────────────
+      if (marlinBootCbRef.current) {
+        const isReady = /\bstart\b/i.test(trimmed)
+          || /marlin/i.test(trimmed)
+          || /^ok\b/i.test(trimmed);
+        if (isReady) {
+          const cb = marlinBootCbRef.current;
+          marlinBootCbRef.current = null;
+          cb();
+        }
+      } else if (/\bstart\b/i.test(trimmed) && lateHomingCbRef.current) {
+        // Recovery path: 'start' arrived AFTER the 12s fallback fired (e.g. 6 min clone bootloader delay).
+        // The earlier G28 was swallowed by the bootloader; re-home now that Marlin is alive.
+        console.log('[Boot] Late "start" detected — re-triggering homing');
+        const fn = lateHomingCbRef.current;
+        lateHomingCbRef.current = null;
+        fn(true); // isLateRecovery = true
+      }
+
+      // ── Homing ok-waiter (G28 / M400 completion) ────────────────────
+      if (awaitingOkRef.current && /^ok\b/i.test(trimmed)) {
+        const cb = awaitingOkRef.current;
+        awaitingOkRef.current = null;
+        cb();
       }
     });
     return removeDataListener;
   }, []);
 
-  // ── Auto-reconnect helpers ───────────────────────────────────────────────────
-
-  const stopAutoReconnect = () => {
-    if (reconnectIntervalRef.current) {
-      clearInterval(reconnectIntervalRef.current);
-      reconnectIntervalRef.current = null;
+  // Auto-scroll console
+  useEffect(() => {
+    if (consoleEndRef.current) {
+      consoleEndRef.current.scrollIntoView({ behavior: 'smooth' });
     }
-    setIsReconnecting(false);
-  };
+  }, [consoleLines]);
 
-  const startAutoReconnect = (targetPath) => {
-    if (!targetPath) return;
-    stopAutoReconnect();
-    reconnectTargetRef.current = targetPath;
-    setIsReconnecting(true);
-
-    reconnectIntervalRef.current = setInterval(async () => {
-      if (isIntentionalDisconnectRef.current) {
-        stopAutoReconnect();
-        return;
-      }
-      try {
-        const list = await window.serial.list();
-        const found = list.some(p => p.path === reconnectTargetRef.current);
-        if (found) {
-          stopAutoReconnect();
-          await connectTo(reconnectTargetRef.current, baudRef.current);
-        }
-      } catch { /* ignore — port not ready yet */ }
-    }, 2000);
-  };
-
-  // Cleanup all intervals and listeners on unmount
-  useEffect(() => () => { stopAutoReconnect(); stopStatusQuery(); }, []);
+  // Cleanup on unmount
+  useEffect(() => () => {
+    if (statusQueryIntervalRef.current) clearInterval(statusQueryIntervalRef.current);
+  }, []);
 
   // ── Connection logic ─────────────────────────────────────────────────────────
 
-  // Core connect — used by both the button and the auto-reconnect poller.
   const connectTo = async (targetPath, targetBaud) => {
     if (!targetPath) return toast.warning("Select a serial port first.");
     try {
       hasReceivedPosRef.current = false;
+      awaitingOkRef.current = null;
       setIsHoming(false);
       await window.serial.open({ path: targetPath, baudRate: targetBaud });
       if (onConnectRef.current) onConnectRef.current();
 
       const isReconnect = hasConnectedOnceRef.current;
-      if (!isReconnect) {
-        hasConnectedOnceRef.current = true;
-        toast.success('Connection established successfully.');
-      }
+      if (!isReconnect) hasConnectedOnceRef.current = true;
+      // Inject a visible diagnostic marker into the console
+      // (Removed hardcoded console line for Port Opened)
 
-      startStatusQuery();
+      // Show waiting toast
+      if (bootToastIdRef.current) toast.dismiss(bootToastIdRef.current);
+      bootToastIdRef.current = toast.info(
+        <span>Waiting for board<span className="loading-dots"></span></span>,
+        { sticky: true }
+      );
 
-      if (isReconnect) {
-        // Reconnect path — skip homing, resume directly.
-        // A USB cable pull doesn't reset the machine firmware, so it's still physically homed.
-        window.dispatchEvent(new CustomEvent('serial:connected'));
-        window.dispatchEvent(new CustomEvent('machine:homed'));
-      } else {
-        // First connect — home so position is known
-        setTimeout(async () => {
-          try {
-            setIsHoming(true);
-            await window.serial.writeLine('G28');
-            setTimeout(() => {
+      // ── Dynamic Boot Detection (identical pattern to glue dispensing app) ────────
+      // Arduino resets on USB connect (DTR). Wait for Marlin's "start" / version / "ok".
+      // Falls back to 12 s if no boot message received (same as glue app). 
+      let bootHandled = false;
+
+      const onMarlinReady = async (isLateRecovery = false) => {
+        if (bootHandled && !isLateRecovery) return;
+        bootHandled = true;
+        clearTimeout(bootFallback);          // cancel the 12s fallback
+
+        if (bootToastIdRef.current) {
+          toast.dismiss(bootToastIdRef.current);
+          bootToastIdRef.current = null;
+        }
+
+        console.log('[Boot] Marlin ready — starting homing sequence');
+        // Start M114 polling first (same as glue app), then pause during G28
+        startStatusQuery();
+        await new Promise(r => setTimeout(r, 500));
+
+        try {
+          setIsHoming(true);
+          // (Removed hardcoded console line for Sending G28 Auto-Home)
+          window.pauseSerialPolling = true;
+          await new Promise(r => setTimeout(r, 300));
+
+          await window.serial.writeLine('G28');
+          await window.serial.writeLine('M400');
+          
+          // ── Wait for G28 completion via awaitingOkRef (same as glue app) ──────
+          const homingTimeout = setTimeout(() => {
+            awaitingOkRef.current = null;
+            window.pauseSerialPolling = false;
+            setConsoleLines((prev) => [...prev, {
+              text: `[${new Date().toLocaleTimeString()}] Homing timed out after 120s!`,
+              dim: false, info: true
+            }]);
+            setIsHoming(false);
+            if (onHomingCompleteRef.current) onHomingCompleteRef.current();
+            window.dispatchEvent(new CustomEvent('serial:homing-complete'));
+            window.dispatchEvent(new CustomEvent('machine:homed'));
+          }, 120000);
+
+          let okPhase = 0;
+          const resolveHoming = () => {
+            okPhase++;
+            if (okPhase < 2) {
+              awaitingOkRef.current = resolveHoming; // wait for second ok (M400)
+            } else {
+              clearTimeout(homingTimeout);
+              window.pauseSerialPolling = false;
+              setConsoleLines((prev) => [...prev, {
+                text: `[${new Date().toLocaleTimeString()}] Homing Complete!`,
+                dim: false, info: true
+              }]);
+              toast.success('Machine is ready!');
               setIsHoming(false);
               if (onHomingCompleteRef.current) onHomingCompleteRef.current();
               window.dispatchEvent(new CustomEvent('serial:homing-complete'));
-            }, 5000);
-          } catch (e) {
-            console.error(e);
-            setIsHoming(false);
-          }
-        }, 2000);
-      }
+              window.dispatchEvent(new CustomEvent('machine:homed'));
+            }
+          };
+          awaitingOkRef.current = resolveHoming;
+        } catch (e) {
+          console.error('[Homing]', e);
+          window.pauseSerialPolling = false;
+          setIsHoming(false);
+        }
+      };
+
+      marlinBootCbRef.current = onMarlinReady;
+      lateHomingCbRef.current = onMarlinReady;
+
+      // 12s fallback — same timeout as glue dispensing app
+      // If no boot signal arrives in 12s, proceed anyway (board may already be running Marlin)
+      
+      const bootFallback = setTimeout(() => {
+        bootFallbackRef.current = null;
+        if (!bootHandled) {
+          console.warn('[Boot] No Marlin boot signal in 12 s — using fallback timing');
+          marlinBootCbRef.current = null;
+          // Note: we do NOT clear lateHomingCbRef here! We leave it active so if "start" 
+          // arrives 6 minutes later due to clone bootloader, it can re-trigger homing.
+          onMarlinReady();
+        }
+      }, 12000);
+      bootFallbackRef.current = bootFallback; // store handle so disconnect can cancel it
     } catch (e) {
-      toast.error(`Failed to open ${targetPath}: ${e.message}`);
-      // If this was an auto-reconnect attempt and the port vanished again, keep polling
-      if (!isIntentionalDisconnectRef.current) {
-        startAutoReconnect(targetPath);
-      }
+      console.error('[Connect]', e); 
+      toast.error(`Connect failed: ${e?.message || e}`);
     }
   };
+
+  connectRef.current = connectTo; // always points to the latest connect closure
 
   // Manual connect button handler
   const connect = async () => {
     isIntentionalDisconnectRef.current = false;
-    stopAutoReconnect();
     await connectTo(path, baud);
   };
 
-  // Manual disconnect button handler — must NOT trigger auto-reconnect
+  // Manual disconnect button handler
   const disconnect = async () => {
     isIntentionalDisconnectRef.current = true;
-    stopAutoReconnect();
     stopStatusQuery();
     try { await window.serial.close(); } catch { }
     setIsHoming(false);
+    marlinBootCbRef.current = null;
+    awaitingOkRef.current = null;
+    lateHomingCbRef.current = null;
+    clearTimeout(bootFallbackRef.current);
+    bootFallbackRef.current = null;
+    if (bootToastIdRef.current) {
+      toast.dismiss(bootToastIdRef.current);
+      bootToastIdRef.current = null;
+    }
+    window.pauseSerialPolling = false;
     if (onDisconnectRef.current) onDisconnectRef.current();
   };
 
-  // ── Cable-pull handler (dispatched by AutomatedDispensingPanel) ─────────────
-
-  useEffect(() => {
-    const onConnectionLost = async () => {
-      if (isIntentionalDisconnectRef.current) return;
-      const targetPath = pathRef.current;
-      stopStatusQuery();
-      try { await window.serial.close(); } catch { }
-      if (onDisconnectRef.current) onDisconnectRef.current();
-      startAutoReconnect(targetPath);
-    };
-
-    window.addEventListener('serial:connection-lost', onConnectionLost);
-    return () => window.removeEventListener('serial:connection-lost', onConnectionLost);
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // ── IPC port-closed event — OS fires this within ~1 s of a USB cable pull ───
-  // This is the primary fast-path for cable-pull detection during an active job
-  // (M114 polling is paused while the job runs, so the window event alone is too slow).
-
-  useEffect(() => {
-    if (!window.serial?.onPortClosed) return;
-    const cleanup = window.serial.onPortClosed(() => {
-      if (!isIntentionalDisconnectRef.current) {
-        window.dispatchEvent(new CustomEvent('serial:connection-lost'));
-      }
-    });
-    return cleanup;
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── M114 status polling ──────────────────────────────────────────────────────
 
@@ -240,23 +329,19 @@ export default function SerialPanel({
   };
 
   const startStatusQuery = () => {
-    stopStatusQuery(); // clear any previous interval before creating a new one
+    stopStatusQuery();
     let consecutiveFailures = 0;
     statusQueryIntervalRef.current = setInterval(async () => {
-      if (window.pauseSerialPolling) return; // job is running — cable-pull detected by sendGcodeWait
+      if (window.pauseSerialPolling) return;
       try {
         await window.serial.writeLine('M114');
         consecutiveFailures = 0;
       } catch {
         consecutiveFailures++;
-        // 3 consecutive failures ≈ 1.5 s — port is gone
-        if (
-          consecutiveFailures >= 3 &&
-          !isIntentionalDisconnectRef.current &&
-          reconnectIntervalRef.current === null // not already reconnecting
-        ) {
+        if (consecutiveFailures >= 3 && !isIntentionalDisconnectRef.current) {
           consecutiveFailures = 0;
-          window.dispatchEvent(new CustomEvent('serial:connection-lost'));
+          stopStatusQuery();
+          // main.js will emit serial:disconnected — onDisconnect handler will clean up
         }
       }
     }, 500);
@@ -306,11 +391,7 @@ export default function SerialPanel({
               CONNECTED
             </span>
           )}
-          {isReconnecting && !isConnected && (
-            <span style={{ fontSize: '0.6em', background: '#e3b341', color: 'black', padding: '2px 6px', borderRadius: 4, marginLeft: 8, verticalAlign: 'middle', animation: 'pulse 1.5s infinite' }}>
-              RECONNECTING…
-            </span>
-          )}
+
         </h3>
 
         {/* Machine Position Display */}
@@ -338,16 +419,16 @@ export default function SerialPanel({
       </div>
 
       <div className="flex-row" style={{ marginTop: 8, paddingBottom: 16, borderBottom: '1px solid #444', flexWrap: 'wrap', gap: '8px' }}>
-        <button className="btn secondary" onClick={refresh} disabled={isReconnecting}>Refresh</button>
+        <button className="btn secondary" onClick={refresh} disabled={isConnected}>Refresh</button>
 
-        <select value={baud} onChange={e => setBaud(Number(e.target.value))} style={{ width: 100 }} disabled={isConnected || isReconnecting}>
+        <select value={baud} onChange={e => setBaud(Number(e.target.value))} style={{ width: 100 }} disabled={isConnected}>
           <option value={115200}>115200</option>
           <option value={250000}>250000</option>
           <option value={57600}>57600</option>
           <option value={9600}>9600</option>
         </select>
 
-        <select value={path} onChange={e => setPath(e.target.value)} style={{ minWidth: 220, flex: 1 }} disabled={isConnected || isReconnecting}>
+        <select value={path} onChange={e => setPath(e.target.value)} style={{ minWidth: 220, flex: 1 }} disabled={isConnected}>
           {ports.length === 0
             ? <option value="">(no serial ports found)</option>
             : ports.map(p => (
@@ -381,7 +462,22 @@ export default function SerialPanel({
         {/* Right Panel: Formatted Console */}
         <div className="console-pane">
           <div className="console-window">
-            {consoleLines.map((l, i) => <div key={i}>{l}</div>)}
+            {consoleLines.map((l, i) => {
+              const entry = typeof l === 'object' ? l : { text: l, dim: false, info: false };
+              return (
+                <div key={i} style={{
+                  color: entry.info ? '#00c49a' : entry.dim ? '#555' : '#ccc',
+                  fontFamily: 'monospace',
+                  fontSize: '0.82em',
+                  lineHeight: '1.4',
+                  whiteSpace: 'pre-wrap',
+                  wordBreak: 'break-all',
+                }}>
+                  {entry.text}
+                </div>
+              );
+            })}
+            <div ref={consoleEndRef} />
           </div>
           <div className="console-input-row">
             <button className="btn-send" onClick={sendLine} disabled={!isConnected}>Send</button>

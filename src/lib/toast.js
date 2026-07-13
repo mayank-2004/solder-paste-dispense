@@ -4,16 +4,22 @@ const DEFAULT_DURATION = { info: 4000, success: 3000, warning: 6000, error: 0 };
 
 export function toast(message, type = 'info', { duration, sticky } = {}) {
   const autoSticky = type === 'error';
+  const id = ++_id;
   window.dispatchEvent(new CustomEvent('app:toast', {
     detail: {
-      id: ++_id,
+      id,
       message,
       type,
       duration: duration ?? DEFAULT_DURATION[type] ?? 4000,
       sticky: sticky ?? autoSticky,
     }
   }));
+  return id;
 }
+
+toast.dismiss = (id) => {
+  window.dispatchEvent(new CustomEvent('app:toast-dismiss', { detail: { id } }));
+};
 
 toast.info    = (msg, opts) => toast(msg, 'info',    opts);
 toast.success = (msg, opts) => toast(msg, 'success', opts);

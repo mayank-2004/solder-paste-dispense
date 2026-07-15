@@ -630,10 +630,18 @@ export default function App() {
     const geom = getSvgGeom(); if (!geom) return;
 
     const mmToCurrentUnits = (ptMm) => {
+      // Offset applied by gerber-to-svg when it zeroes the viewBox
+      // We assume it shifts by the bounding box of the board outline
+      const ox = (boardOutline && geom.minX === 0) ? boardOutline.minX : 0;
+      const oy = (boardOutline && geom.minY === 0) ? boardOutline.minY : 0;
+      
+      const px = ptMm.x - ox;
+      const py = ptMm.y - oy;
+
       // Y: FLIP — Gerber Y grows up, SVG Y grows down
-      const yUnits = (2 * geom.minY + geom.vbH) - (ptMm.y / geom.mmPerUnit);
+      const yUnits = (2 * geom.minY + geom.vbH) - (py / geom.mmPerUnit);
       // X: pcb-stackup mirrors the bottom SVG, so we mirror the coordinate to match
-      const xRaw = ptMm.x / geom.mmPerUnit;
+      const xRaw = px / geom.mmPerUnit;
       const xUnits = side === 'bottom'
         ? (2 * geom.minX + geom.vbW) - xRaw
         : xRaw;

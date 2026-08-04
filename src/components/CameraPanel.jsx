@@ -9,14 +9,95 @@ import "./CameraPanel.css";
 
 /**
  * Predict where a fiducial should be in machine coordinates.
- * Priority: full transform → translation from one solved point → origin offset → null.
+ *
+ * Priority:
+ *   1. Full transform (panelXf or boardXf) — most accurate.
+ *   2. Two or more solved fiducials of the same group — fit a similarity (handles rotation + Y-flip).
+ *   3. Single solved fiducial — translate, but detect axis orientation by checking the
+ *      direction of the design-space offset vs the machine-space offset of the solved point.
+ *      This correctly handles the common case where Gerber Y is up but machine Y is down.
+ *   4. Effective PCB origin offset — rough fallback.
  */
 function predictFidMachinePos(fid, allFiducials, xf, effectiveOrigin) {
   if (!fid?.design) return null;
+
+  // ── Priority 1: Full transform available ─────────────────────────────────
   if (xf) return applyTransform(xf, fid.design);
-  const solved = (allFiducials || []).find(f => f.id !== fid.id && f.design && f.machine);
-  if (solved) return { x: fid.design.x + (solved.machine.x - solved.design.x), y: fid.design.y + (solved.machine.y - solved.design.y) };
-  if (effectiveOrigin) return { x: fid.design.x + effectiveOrigin.x, y: fid.design.y + effectiveOrigin.y };
+
+  const solved = (allFiducials || []).filter(f => f.id !== fid.id && f.design && f.machine);
+
+  // ── Priority 2: 2+ solved peers — fit similarity (captures rotation + scale + Y-flip) ─
+  if (solved.length >= 2) {
+    try {
+      const T = fitSimilarity(
+        solved.map(f => f.design),
+        solved.map(f => f.machine)
+      );
+      return applyTransform(T, fid.design);
+    } catch {
+      // fall through to single-point logic
+    }
+  }
+
+  // ── Priority 3: Single solved peer — axis-aware translation ──────────────
+  if (solved.length === 1) {
+    const ref = solved[0];
+    // Vector from the solved fiducial to the target, in design space
+    const dDesignX = fid.design.x - ref.design.x;
+    const dDesignY = fid.design.y - ref.design.y;
+
+    // Determine Y-axis orientation by comparing the solved fiducial's design vs machine coords.
+    // If the machine's Y increased when the Gerber Y increased → same direction.
+    // If they moved in opposite directions → Y is flipped (most common with Gerber boards).
+    //
+    // We use a heuristic: if the machine's Y offset (machine.y - origin.y) has the
+    // opposite sign to the design's Y offset vs origin, the Y axis is inverted.
+    // Since we only have one reference point, we estimate axis orientation by checking
+    // whether design.y ≈ machine.y (same-orientation) or roughly -machine.y (flipped).
+    //
+    // The most reliable approach: check which prediction (flipped vs not) keeps us
+    // on the same side of the machine's current position as the design implies.
+    // We use the raw design-to-machine delta of the single solved point:
+    //   If ref.machine.y is close to ref.design.y → Y same direction.
+    //   If they have largely opposite signs → Y is likely flipped.
+    //
+    // Actually, the cleanest approach: use the design-space and machine-space relationship
+    // of the solved point itself to infer axis orientation:
+    //   designYSign  = sign(ref.design.y)   (Gerber: positive = up on board)
+    //   machineYSign = sign(ref.machine.y)  (machine: positive direction of Y motor)
+    // If they differ, Y is flipped.
+    //
+    // However, since machine origin is arbitrary, we can't rely on absolute signs.
+    // Instead, when we have the effective origin, we compute relative values:
+    let machineX, machineY;
+
+    if (effectiveOrigin) {
+      // Compute design offset relative to an anchor (origin)
+      const designRelX = ref.design.x - effectiveOrigin.x;
+      const designRelY = ref.design.y - effectiveOrigin.y;
+      const machineRelX = ref.machine.x - effectiveOrigin.x;
+      const machineRelY = ref.machine.y - effectiveOrigin.y;
+
+      // Check axis orientation: if design and machine have same-sign Y relative to origin → same dir
+      const yFlipped = designRelY !== 0 && Math.sign(designRelY) !== Math.sign(machineRelY);
+      const xFlipped = designRelX !== 0 && Math.sign(designRelX) !== Math.sign(machineRelX);
+
+      machineX = ref.machine.x + (xFlipped ? -dDesignX : dDesignX);
+      machineY = ref.machine.y + (yFlipped ? -dDesignY : dDesignY);
+    } else {
+      // No origin — use plain translation (same as before, but note the limitation)
+      machineX = ref.machine.x + dDesignX;
+      machineY = ref.machine.y + dDesignY;
+    }
+
+    return { x: machineX, y: machineY };
+  }
+
+  // ── Priority 4: Origin offset only ───────────────────────────────────────
+  if (effectiveOrigin) {
+    return { x: fid.design.x + effectiveOrigin.x, y: fid.design.y + effectiveOrigin.y };
+  }
+
   return null;
 }
 
@@ -700,7 +781,7 @@ export default function CameraPanel({
       if (isBusy) return;
       setIsBusy(true);
       try {
-        const cmds = jogRel({ dx, dy, feed: 2000 });
+        const cmds = jogRel({ dx, dy, feed: 1000 });
         if (window.serial && window.serial.writeLine) {
           for (const line of cmds) await window.serial.writeLine(line);
           setIsBusy(false);
@@ -957,12 +1038,16 @@ export default function CameraPanel({
     hasJoggedInCycleRef.current = false;
     settleUntilRef.current = Date.now() + 2200; // ~2 s for machine to arrive and settle
 
+    window.pauseSerialPolling = true; // Pause polling during transit move
     const cmds = moveAbs({ x: camX, y: camY, feed: 3000 });
     window.serial.writeLine('G90').catch(() => { });
     cmds.forEach(c => window.serial.writeLine(c).catch(() => { }));
 
     setAutoSearchStatus(`Moving to ${fidActiveId}…`);
-    setTimeout(() => setAutoSearchStatus(''), 2500);
+    setTimeout(() => {
+      setAutoSearchStatus('');
+      window.pauseSerialPolling = false; // Resume polling after transit completes
+    }, 2500);
   }, [fidActiveId, detectionInterval, panelXf]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // --- OVERWRITE HELPER: update a specific slot by ID without advancing the arm dropdown ---
@@ -1164,8 +1249,9 @@ export default function CameraPanel({
   // lockedAt: machine position when converged, used to detect when user moves to new fiducial.
   const servoStateRef = useRef({ phase: 'idle', lockedAt: null });
   const settleUntilRef = useRef(0);     // suppress detection until this timestamp (ms)
+  const isJoggingRef = useRef(false);    // lock flag to prevent duplicate / stacked jog commands
   const SERVO_FEED = 800;           // mm/min jog speed
-  const SERVO_SETTLE_MS = 800;           // ms to wait after each jog before re-checking
+  const SERVO_SETTLE_MS = 1000;           // ms to wait after each jog before re-checking
   const CONVERGE_MM = 0.05;          // crosshair within 0.05mm → declare converged & save
   const TRULY_CENTRED_MM = 0.008;        // sub-pixel threshold — safe to skip jog requirement
   const CONVERGE_STABLE_FRAMES = 3;      // fine-phase polls needed before saving (prevents Hough false-centre saves)
@@ -1216,6 +1302,7 @@ export default function CameraPanel({
           const data = await r.json();
           setPythonVisionData(data);
 
+          if (isJoggingRef.current) return;
           if (Date.now() < settleUntilRef.current) return;
           if (Date.now() < saveBlockRef.current) return; // wait until operator moves to next fiducial
 
@@ -1297,14 +1384,24 @@ export default function CameraPanel({
 
           // Jog toward fiducial center. Coarse: faster + longer settle; Fine: normal.
           const jogFeed = servoPhase === 'idle' ? SERVO_FEED * 1.5 : SERVO_FEED;
-          const settleMs = servoPhase === 'idle' ? SERVO_SETTLE_MS + 400 : SERVO_SETTLE_MS;
+          const moveTimeMs = (dist / (jogFeed / 60)) * 1000;
+          const settleMs = Math.max(2500, Math.ceil(moveTimeMs + 2000));
           settleUntilRef.current = Date.now() + settleMs;
-          console.log(`[PyServo] ${servoPhase === 'idle' ? 'Coarse' : 'Fine  '} jog ΔX:${dx.toFixed(3)} ΔY:${dy.toFixed(3)} mm`);
+          isJoggingRef.current = true;
+          setTimeout(() => { isJoggingRef.current = false; }, settleMs);
+
+          console.log(`[PyServo] ${servoPhase === 'idle' ? 'Coarse' : 'Fine  '} jog ΔX:${dx.toFixed(3)} ΔY:${dy.toFixed(3)} mm (settle ${settleMs}ms)`);
           try {
+            window.pauseSerialPolling = true; // Pause polling during visual servo jog
             const cmds = jogRel({ dx, dy, feed: jogFeed });
             if (window.serial?.writeLine) for (const line of cmds) await window.serial.writeLine(line);
             hasJoggedInCycleRef.current = true; // servo has now physically moved this cycle
           } catch (err) { console.error('[PyServo] Jog failed:', err); }
+          finally {
+            setTimeout(() => {
+              window.pauseSerialPolling = false; // Resume polling after jog settles
+            }, settleMs);
+          }
 
           // After the coarse jog, switch to fine mode for sub-pixel correction
           if (servoPhase === 'idle') servoStateRef.current = { ...servoStateRef.current, phase: 'fine' };
@@ -1433,11 +1530,18 @@ export default function CameraPanel({
                 }
               }
 
-              if (!hasJoggedRef.current && (Math.abs(dx) > 0.005 || Math.abs(dy) > 0.005)) {
+              if (!isJoggingRef.current && Date.now() >= settleUntilRef.current && !hasJoggedRef.current && (Math.abs(dx) > 0.005 || Math.abs(dy) > 0.005)) {
                 hasJoggedRef.current = { x: crosshairCoord.x, y: crosshairCoord.y }; // Lock immediately
 
+                const dist = Math.hypot(dx, dy);
+                const moveTimeMs = (dist / (800 / 60)) * 1000;
+                const settleMs = Math.max(2500, Math.ceil(moveTimeMs + 2000));
+                settleUntilRef.current = Date.now() + settleMs;
+                isJoggingRef.current = true;
+                setTimeout(() => { isJoggingRef.current = false; }, settleMs);
 
                 try {
+                  window.pauseSerialPolling = true; // Pause polling during browser visual servo jog
                   // Step 1: Move camera crosshair to exactly center on the fiducial
                   const camCorrCmds = jogRel({ dx, dy, feed: 800 });
                   if (window.serial && window.serial.writeLine) {
@@ -1448,6 +1552,10 @@ export default function CameraPanel({
                   }
                 } catch (err) {
                   console.error('[FiducialAlign] Jog failed:', err);
+                } finally {
+                  setTimeout(() => {
+                    window.pauseSerialPolling = false; // Resume polling after jog settles
+                  }, 1200);
                 }
               }
             }
@@ -1519,16 +1627,27 @@ export default function CameraPanel({
         lastAutoSavedRef.current = null;
       }
 
+      const dist = Math.hypot(dx, dy);
+      const moveTimeMs = (dist / (800 / 60)) * 1000;
+      const settleMs = Math.max(2500, Math.ceil(moveTimeMs + 2000));
+      settleUntilRef.current = Date.now() + settleMs;
+      isJoggingRef.current = true;
+      setTimeout(() => { isJoggingRef.current = false; }, settleMs);
+
+      window.pauseSerialPolling = true; // Pause polling during manual snap jog
       const cmds = jogRel({ dx, dy, feed: 800 });
       if (window.serial?.writeLine) {
         for (const line of cmds) await window.serial.writeLine(line);
-        console.log('[SnapToFiducial] Jog sent — servo will re-check after settle.');
-        settleUntilRef.current = Date.now() + 2000;
+        console.log(`[SnapToFiducial] Jog sent — servo locked for ${settleMs}ms settlement.`);
         servoStateRef.current = { phase: 'idle', lockedAt: null }; // let servo do the final save
       } else {
         console.warn('[SnapToFiducial] Serial not connected.');
         servoStateRef.current = { phase: 'idle', lockedAt: null };
+        isJoggingRef.current = false;
       }
+      setTimeout(() => {
+        window.pauseSerialPolling = false; // Resume polling after settle
+      }, 2000);
 
     } catch (err) {
       console.error('[SnapToFiducial] Failed:', err);
@@ -1591,7 +1710,7 @@ export default function CameraPanel({
     setIsBusy(true);
     try {
       const dist = dir * jogStep;
-      const cmds = jogRel(axis === 'X' ? { dx: dist, feed: 2000 } : { dy: dist, feed: 2000 });
+      const cmds = jogRel(axis === 'X' ? { dx: dist, feed: 1000 } : { dy: dist, feed: 1000 });
       if (window.serial && window.serial.writeLine) {
         for (const line of cmds) await window.serial.writeLine(line);
       }
@@ -1809,12 +1928,19 @@ export default function CameraPanel({
 
                 if (Math.abs(dx) < 0.005 && Math.abs(dy) < 0.005) return;
 
+                const dist = Math.hypot(dx, dy);
+                const moveTimeMs = (dist / (1000 / 60)) * 1000;
+                const settleMs = Math.max(2500, Math.ceil(moveTimeMs + 2000));
+                settleUntilRef.current = Date.now() + settleMs;
+                isJoggingRef.current = true;
+                setTimeout(() => { isJoggingRef.current = false; }, settleMs);
+
                 setIsBusy(true);
                 try {
-                  const cmds = jogRel({ dx, dy, feed: 1500 });
+                  const cmds = jogRel({ dx, dy, feed: 1000 });
                   if (window.serial && window.serial.writeLine) {
                     for (const line of cmds) await window.serial.writeLine(line);
-                    console.log(`[PythonClick] Jogged ΔX:${dx.toFixed(3)} ΔY:${dy.toFixed(3)} mm`);
+                    console.log(`[PythonClick] Jogged ΔX:${dx.toFixed(3)} ΔY:${dy.toFixed(3)} mm (settle ${settleMs}ms)`);
                   } else {
                     console.warn('[PythonClick] Serial not connected');
                   }

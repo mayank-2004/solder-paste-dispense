@@ -32,6 +32,7 @@ import AppHeader from "./components/AppHeader.jsx";
 import { ToastContainer, ConfirmDialog } from "./components/ToastNotification.jsx";
 import { toast, showConfirm } from "./lib/toast.js";
 import { AdminContext } from "./components/AdminContext.jsx";
+import GuidedTour from "./components/GuidedTour.jsx";
 
 function calculatePadCenter(p) {
   if (typeof p.x === "number" && typeof p.y === "number") {
@@ -1749,6 +1750,14 @@ export default function App() {
   return (
     <AdminContext.Provider value={isAdmin}>
     <div id="root" onDragOver={(e) => e.preventDefault()} onDrop={onDrop}>
+      <GuidedTour 
+        isConnected={isSerialConnected} 
+        isHomed={isHomed} 
+        hasFileLoaded={generatedPath !== null && generatedPath.segments && generatedPath.segments.length > 0} 
+        hasFiducialsSet={panelBoards && panelBoards.length > 0 && panelBoards[0].fiducials?.every(f => f.machine)} 
+        isJobRunning={isJobRunning} 
+        jobStage={jobStatistics ? 'finished' : 'idle'} 
+      />
 
       {/* ── TOP HEADER BAR ─────────────────────────────────── */}
       <AppHeader
@@ -1819,7 +1828,8 @@ export default function App() {
                   if (idx != null) {
                     const selectedLayer = layers[idx];
                     if (selectedLayer.type === "solderpaste") {
-                      const padData = extractPadsMm(selectedLayer.text).map(padCenter);
+                      const { pads: basePads } = extractPadsWithPanel(selectedLayer.text);
+                      const padData = basePads.map(padCenter);
                       setPads(processPads(padData));
                       console.log('Solderpaste layer loaded:', padData.length, 'pads');
                       if (selectedLayer.side === 'top') { changeSide('top', true); }

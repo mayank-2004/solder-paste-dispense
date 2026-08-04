@@ -8,7 +8,8 @@ export default function JogPanel({
     isConnected = false
 }) {
     const [stepSize, setStepSize] = useState(10); // mm
-    const [feedRate, setFeedRate] = useState(2000); // mm/min
+    const [xyFeedRate, setXyFeedRate] = useState(1000); // Matches Marlin XY Homing Speed
+    const [zFeedRate, setZFeedRate] = useState(100);    // Matches Marlin Z Homing Speed
     const [safeZ, setSafeZ] = useState(-5); // mm (Machine coordinate usually negative)
     const [isBusy, setIsBusy] = useState(false);
 
@@ -17,13 +18,15 @@ export default function JogPanel({
         if (!isConnected) return toast.warning("Please connect to machine first!");
         if (isBusy) return;
         setIsBusy(true);
+        window.pauseSerialPolling = true;
         try {
             let da = {};
+            const feed = axis === "Z" ? zFeedRate : xyFeedRate;
             if (axis === "X") da = { dx: dir * stepSize };
             else if (axis === "Y") da = { dy: dir * stepSize };
             else if (axis === "Z") da = { dz: dir * stepSize };
 
-            const cmds = jogRel({ ...da, feed: feedRate });
+            const cmds = jogRel({ ...da, feed });
 
             if (window.serial?.writeLine) {
                 for (const line of cmds) await window.serial.writeLine(line);
@@ -32,6 +35,9 @@ export default function JogPanel({
             console.error("Jog failed:", e);
         } finally {
             setIsBusy(false);
+            setTimeout(() => {
+                window.pauseSerialPolling = false;
+            }, 800);
         }
     };
 
@@ -40,6 +46,7 @@ export default function JogPanel({
         if (!await showConfirm(`Move Z to absolute position ${safeZ}mm? Ensure path is clear.`)) return;
 
         setIsBusy(true);
+        window.pauseSerialPolling = true;
         try {
             const cmd = `G53 G0 Z${safeZ}`;
             console.log("Safe Z:", cmd);
@@ -50,6 +57,9 @@ export default function JogPanel({
             console.error("Safe Z failed:", e);
         } finally {
             setIsBusy(false);
+            setTimeout(() => {
+                window.pauseSerialPolling = false;
+            }, 1000);
         }
     };
 
@@ -59,6 +69,7 @@ export default function JogPanel({
         if (!await showConfirm("Home all axes (G28)? Ensure area is clear.")) return;
 
         setIsBusy(true);
+        window.pauseSerialPolling = true;
         try {
             if (window.serial?.writeLine) {
                 await window.serial.writeLine("G28");
@@ -67,6 +78,9 @@ export default function JogPanel({
             console.error("Home failed:", e);
         } finally {
             setIsBusy(false);
+            setTimeout(() => {
+                window.pauseSerialPolling = false;
+            }, 15000); // Homing takes a long time
         }
     };
 
@@ -124,8 +138,13 @@ export default function JogPanel({
                     </label>
 
                     <label>
-                        Feed Rate (mm/min)
-                        <input type="number" value={feedRate} onChange={(e) => setFeedRate(Number(e.target.value))} step={100} />
+                        XY Feed Rate (mm/min)
+                        <input type="number" value={xyFeedRate} onChange={(e) => setXyFeedRate(Number(e.target.value))} step={50} min={10} />
+                    </label>
+
+                    <label>
+                        Z Feed Rate (mm/min)
+                        <input type="number" value={zFeedRate} onChange={(e) => setZFeedRate(Number(e.target.value))} step={20} min={10} />
                     </label>
 
                     <div className="safe-z-section">

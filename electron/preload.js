@@ -11,6 +11,7 @@ contextBridge.exposeInMainWorld('serial', {
     open: (opts) => ipcRenderer.invoke('serial:open', opts),
     close: () => ipcRenderer.invoke('serial:close'),
     writeLine: (line) => ipcRenderer.invoke('serial:writeLine', line),
+    halt: () => ipcRenderer.invoke('serial:halt'),
     sendGcode: (text) => ipcRenderer.invoke('serial:sendGcode', text),
     writeMany: (lines, delayMs = 3) => ipcRenderer.invoke('serial:writeMany', { lines, delayMs }),
     onData: (handler) => {

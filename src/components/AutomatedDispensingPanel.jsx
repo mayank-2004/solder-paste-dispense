@@ -178,6 +178,15 @@ export default function AutomatedDispensingPanel({
   const [boardCheckBusy, setBoardCheckBusy] = useState(false);
   const [boardConfirmed, setBoardConfirmed] = useState(false);
 
+  // Automatically check required checkboxes if fiducial detection was successfully applied
+  useEffect(() => {
+    if (applyXf) {
+      setBoardConfirmed(true);
+      setEnableDotVerification(true);
+      setPurgeEnabled(true);
+    }
+  }, [applyXf]);
+
   // Recipe save/load
   const [savedRecipes, setSavedRecipes] = useState(() => {
     try { return JSON.parse(localStorage.getItem('pasteRecipes') || '{}'); } catch { return {}; }
@@ -189,6 +198,7 @@ export default function AutomatedDispensingPanel({
   const [purgeEnabled, setPurgeEnabled] = useState(true);
   const [purgeDurationMs, setPurgeDurationMs] = useState(2000);
   const [isPurging, setIsPurging] = useState(false);
+  const [reverseBoardOrder, setReverseBoardOrder] = useState(false);
 
   // Dot verification
   const [enableDotVerification, setEnableDotVerification] = useState(false);
@@ -614,7 +624,7 @@ export default function AutomatedDispensingPanel({
 
   const proceedFromPreflight = async () => {
     setBoardCheckResult(null);
-    setBoardConfirmed(false);
+    setBoardConfirmed(!!applyXf);
     setJobStage('homing');
     setMachineStatus('busy');
     setIsJobRunning(true);
@@ -720,9 +730,11 @@ export default function AutomatedDispensingPanel({
 
       setJobProgress({ current: 0, total: totalPoints });
 
-      for (let bIdx = 0; bIdx < panelBoards.length; bIdx++) {
-        setCurrentBoardIdx(bIdx);
-        const board = panelBoards[bIdx];
+      const orderedPanelBoards = reverseBoardOrder ? [...panelBoards].reverse() : panelBoards;
+      for (let bIdx = 0; bIdx < orderedPanelBoards.length; bIdx++) {
+        const realBIdx = reverseBoardOrder ? (panelBoards.length - 1 - bIdx) : bIdx;
+        setCurrentBoardIdx(realBIdx);
+        const board = orderedPanelBoards[bIdx];
         let transform = applyXf ? board.xf : null;
 
         if (applyXf && !transform) {
@@ -824,11 +836,11 @@ export default function AutomatedDispensingPanel({
             tp = applyTransform(panelXf, panelSpacePt);
             // Optional per-board local correction on top (if transform != panelXf)
             if (transform && transform !== panelXf) tp = applyTransform(transform, tp);
-            await sendGcodeWait(`G1 X${(tp.x + calibCorrection.x).toFixed(3)} Y${(tp.y + calibCorrection.y).toFixed(3)} F${speedSettings.travelSpeed ?? 6000}`);
+            await sendGcodeWait(`G1 X${(tp.x + calibCorrection.x).toFixed(3)} Y${(tp.y + calibCorrection.y).toFixed(3)} F${speedSettings.travelSpeed ?? 3000}`);
             p = { ...p, x: tp.x, y: tp.y };
           } else if (transform) {
             tp = applyTransform(transform, p);
-            await sendGcodeWait(`G1 X${(tp.x + calibCorrection.x).toFixed(3)} Y${(tp.y + calibCorrection.y).toFixed(3)} F${speedSettings.travelSpeed ?? 6000}`);
+            await sendGcodeWait(`G1 X${(tp.x + calibCorrection.x).toFixed(3)} Y${(tp.y + calibCorrection.y).toFixed(3)} F${speedSettings.travelSpeed ?? 3000}`);
             p = { ...p, x: tp.x, y: tp.y };
           } else {
             // No transform: align manually using the effective origin
@@ -881,7 +893,7 @@ export default function AutomatedDispensingPanel({
               beadAxis: dispenseMode.axis,
               zWork,
               zSafe: safeTravelHeight,
-              feedXY: speedSettings.travelSpeed ?? 6000,
+              feedXY: speedSettings.travelSpeed ?? 3000,
               feedZ: speedSettings.dispenseSpeed ?? 300,
               feedBead: beadFeedRate,
               valveOnCmd,
@@ -892,7 +904,7 @@ export default function AutomatedDispensingPanel({
               x: finalX, y: finalY,
               zWork,
               zSafe: safeTravelHeight,
-              feedXY: speedSettings.travelSpeed ?? 6000,
+              feedXY: speedSettings.travelSpeed ?? 3000,
               feedZ: speedSettings.dispenseSpeed ?? 300,
               dwellMs: dwell,
               valveOnCmd,
@@ -909,7 +921,7 @@ export default function AutomatedDispensingPanel({
           // ── Post-dispense dot verification ─────────────────────────────
           if (enableDotVerification && tp) {
             // Move camera back over the just-dispensed pad
-            await sendGcodeWait(`G1 X${(tp.x + calibCorrection.x).toFixed(3)} Y${(tp.y + calibCorrection.y).toFixed(3)} F${speedSettings.travelSpeed ?? 6000}`);
+            await sendGcodeWait(`G1 X${(tp.x + calibCorrection.x).toFixed(3)} Y${(tp.y + calibCorrection.y).toFixed(3)} F${speedSettings.travelSpeed ?? 3000}`);
             await sendGcodeWait('M400');
             await new Promise(r => setTimeout(r, 400)); // settle
             setDotCheckResults(prev => [...prev, { padIndex: globalPointCount, passed: true, diameter_mm: 0, confidence: 0, skipped: true }]);
@@ -1059,6 +1071,9 @@ export default function AutomatedDispensingPanel({
     }
     // Emergency: bypass the queue — send directly so the machine stops immediately
     try {
+      if (window.serial?.halt) {
+        await window.serial.halt();
+      }
       await window.serial.writeLine('M42 P4 S0');
       await window.serial.writeLine('G1 Z10 F3000');
     } catch (e) { }
@@ -1087,7 +1102,7 @@ export default function AutomatedDispensingPanel({
   // Applies the live calibration correction so the crosshair lands precisely on-center
   const moveCameraToMachineCoord = async (mx, my) => {
     if (!window.serial || !window.serial.writeLine) return toast.warning('Serial not connected');
-    const feed = speedSettings?.travelSpeed || 4000;
+    const feed = speedSettings?.travelSpeed || 3000;
     const corrX = mx + calibCorrection.x;
     const corrY = my + calibCorrection.y;
     await window.serial.writeLine(`G1 Z${safeTravelHeight} F3000`);
@@ -1137,7 +1152,7 @@ export default function AutomatedDispensingPanel({
     viscosity, beadAreaThreshold, beadFeedRate,
     purgeEnabled, purgeDurationMs,
     valveOnCmd, valveOffCmd,
-    enableDotVerification, enableSurfaceProbe,
+    enableDotVerification, enableSurfaceProbe, reverseBoardOrder,
     nozzleDia,
   });
 
@@ -1169,6 +1184,7 @@ export default function AutomatedDispensingPanel({
     if (r.valveOffCmd != null) setValveOffCmd(r.valveOffCmd);
     if (r.enableDotVerification != null) setEnableDotVerification(r.enableDotVerification);
     if (r.enableSurfaceProbe != null) setEnableSurfaceProbe(r.enableSurfaceProbe);
+    if (r.reverseBoardOrder != null) setReverseBoardOrder(r.reverseBoardOrder);
     if (r.nozzleDia != null) setNozzleDia(r.nozzleDia);
     setActiveRecipe(name);
     setRecipeName(name);
@@ -1299,7 +1315,7 @@ export default function AutomatedDispensingPanel({
               </label>
               <label>
                 Travel Speed (mm/min):
-                <input type="number" step="500" min="500" max="15000" value={speedSettings.travelSpeed ?? 6000}
+                <input type="number" step="500" min="500" max="15000" value={speedSettings.travelSpeed ?? 3000}
                   onChange={e => setSpeedSettings(prev => ({ ...prev, travelSpeed: Number(e.target.value) }))}
                   style={{ width: '100%', marginTop: '4px' }} />
                 <small style={{ color: '#888' }}>XY moves between pads. Typical: 4000–8000</small>
@@ -1326,7 +1342,7 @@ export default function AutomatedDispensingPanel({
                 </label>
               )}
               <br />
-              <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', gridColumn: '1 / -1' }}>
+              {/* <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', gridColumn: '1 / -1' }}>
                 <input
                   type="checkbox"
                   checked={enableSurfaceProbe}
@@ -1334,7 +1350,7 @@ export default function AutomatedDispensingPanel({
                   style={{ width: 'auto', marginTop: 0 }}
                 />
                 <span>Z-axis surface probe before dispensing</span>
-              </label>
+              </label> */}
               {enableSurfaceProbe && (
                 <div style={{ gridColumn: '1 / -1', fontSize: '0.78em', color: '#8b949e', paddingLeft: 22, marginTop: -4 }}>
                   Sends <code>G38.2 Z-30 F50</code> after PCB load — detects actual PCB surface, sets Z=0 there. Dispense Z is then clearance above that surface. Requires a probe/BLTouch wired to the controller.
@@ -1357,6 +1373,15 @@ export default function AutomatedDispensingPanel({
                   style={{ width: 'auto', marginTop: 0 }}
                 />
                 <span>Purge nozzle before job</span>
+              </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <input
+                  type="checkbox"
+                  checked={reverseBoardOrder}
+                  onChange={e => setReverseBoardOrder(e.target.checked)}
+                  style={{ width: 'auto', marginTop: 0 }}
+                />
+                <span>Reverse Board Dispensing Order</span>
               </label>
             </div>
             </fieldset>

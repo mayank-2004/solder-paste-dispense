@@ -206,7 +206,7 @@ export default function SerialPanel({
       const onMarlinReady = async (isLateRecovery = false) => {
         if (bootHandled && !isLateRecovery) return;
         bootHandled = true;
-        clearTimeout(bootFallback);          // cancel the 12s fallback
+        // clearTimeout(bootFallback);          // cancel the 12s fallback
 
         if (bootToastIdRef.current) {
           toast.dismiss(bootToastIdRef.current);
@@ -222,8 +222,12 @@ export default function SerialPanel({
           setIsHoming(true);
           // (Removed hardcoded console line for Sending G28 Auto-Home)
           window.pauseSerialPolling = true;
-          await new Promise(r => setTimeout(r, 300));
-
+          // Wait 3 seconds to allow stepper drivers and Marlin to fully stabilize 
+          // after the bootloader reset before blasting movement commands.
+          await new Promise(r => setTimeout(r, 3000));
+          
+          setConsoleLines(prev => [...prev, `[SYS] ${new Date().toISOString()} Starting Auto-Home (G28)...`].slice(-500));
+          await window.serial.writeLine('G90');
           await window.serial.writeLine('G28');
           await window.serial.writeLine('M400');
           
@@ -273,18 +277,17 @@ export default function SerialPanel({
 
       // 12s fallback — same timeout as glue dispensing app
       // If no boot signal arrives in 12s, proceed anyway (board may already be running Marlin)
-      
-      const bootFallback = setTimeout(() => {
-        bootFallbackRef.current = null;
-        if (!bootHandled) {
-          console.warn('[Boot] No Marlin boot signal in 12 s — using fallback timing');
-          marlinBootCbRef.current = null;
-          // Note: we do NOT clear lateHomingCbRef here! We leave it active so if "start" 
-          // arrives 6 minutes later due to clone bootloader, it can re-trigger homing.
-          onMarlinReady();
-        }
-      }, 12000);
-      bootFallbackRef.current = bootFallback; // store handle so disconnect can cancel it
+      // const bootFallback = setTimeout(() => {
+      //   bootFallbackRef.current = null;
+      //   if (!bootHandled) {
+      //     console.warn('[Boot] No Marlin boot signal in 12 s — using fallback timing');
+      //     marlinBootCbRef.current = null;
+      //     // Note: we do NOT clear lateHomingCbRef here! We leave it active so if "start" 
+      //     // arrives 6 minutes later due to clone bootloader, it can re-trigger homing.
+      //     onMarlinReady();
+      //   }
+      // }, 12000);
+      // bootFallbackRef.current = bootFallback; // store handle so disconnect can cancel it
     } catch (e) {
       console.error('[Connect]', e); 
       toast.error(`Connect failed: ${e?.message || e}`);
@@ -384,10 +387,10 @@ export default function SerialPanel({
   return (
     <div className="panel serial-panel">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <h3>
+        <h3 style={{ marginTop: 10, marginLeft: 8 }}>
           Machine Connectivity
           {isConnected && (
-            <span style={{ fontSize: '0.6em', background: '#28a745', color: 'white', padding: '2px 6px', borderRadius: 4, marginLeft: 8, verticalAlign: 'middle' }}>
+            <span className="text-success" style={{ fontSize: '0.6em', background: 'rgba(0, 232, 122, 0.1)', color: 'white', padding: '2px 6px', borderRadius: 4, marginLeft: 8, verticalAlign: 'middle' }}>
               CONNECTED
             </span>
           )}

@@ -13,6 +13,22 @@ let lastConnectedBaud = 250000; // baud rate used when last opened
 let portWatcherTimer = null;    // setInterval handle for reappearance polling
 let keepAliveTimer = null;      // setInterval handle for USB keepalive pings
 
+async function sendHaltCommands(port, forceEmergency = false) {
+  if (!port || !port.isOpen) return;
+  return new Promise((resolve) => {
+    // \x18 (Grbl reset), ! (Grbl feedhold), M410 (Marlin quickstop)
+    let payload = '\x18!\r\nM410\r\n';
+    if (forceEmergency) {
+      payload += 'M112\r\n'; // Marlin emergency stop (locks CPU, safe for app exit)
+    }
+    port.write(payload, () => {
+      port.drain(() => {
+        setTimeout(resolve, 50);
+      });
+    });
+  });
+}
+
 function stopKeepAlive() {
   if (keepAliveTimer) { clearInterval(keepAliveTimer); keepAliveTimer = null; }
 }
@@ -133,6 +149,44 @@ function createWindow() {
   } else {
     win.loadFile(path.join(__dirname, '..', 'dist', 'index.html'));
   }
+
+  // Handle window close cleanly by stopping the machine immediately
+  win.on('close', async (e) => {
+    if (serial.port?.isOpen) {
+      e.preventDefault(); // Stop window from closing immediately
+      stopKeepAlive();
+      stopPortWatcher();
+      intentionalClose = true;
+      try {
+        await sendHaltCommands(serial.port, true);
+        await new Promise(resolve => serial.port.close(resolve));
+      } catch (err) {
+        console.error('Error halting machine on close:', err);
+      } finally {
+        serial.port = null;
+        serial.parser = null;
+        win.destroy(); // Now close the window
+      }
+    }
+  });
+
+  // Handle page refresh/reload by halting the machine
+  win.webContents.on('did-start-navigation', async (event, url, isInPlace, isMainFrame) => {
+    if (isMainFrame && !isInPlace && serial.port?.isOpen) {
+      console.log('Page navigating/reloading. Halting machine...');
+      stopKeepAlive();
+      stopPortWatcher();
+      try {
+        await sendHaltCommands(serial.port, true);
+        await new Promise(resolve => serial.port.close(resolve));
+      } catch (err) {
+        console.error('Error halting machine on reload:', err);
+      } finally {
+        serial.port = null;
+        serial.parser = null;
+      }
+    }
+  });
 }
 
 app.whenReady().then(() => {
@@ -230,6 +284,13 @@ ipcMain.handle('serial:close', async () => {
   stopPortWatcher(); // operator disconnected intentionally — don't auto-reconnect
   stopKeepAlive();
   intentionalClose = true;
+
+  try {
+    await sendHaltCommands(serial.port, true);
+  } catch (err) {
+    console.error('Error sending halt commands on close:', err);
+  }
+
   await new Promise((resolve) => {
     serial.port.close(() => {
       serial.port = null;
@@ -238,6 +299,13 @@ ipcMain.handle('serial:close', async () => {
       resolve();
     });
   });
+  return true;
+});
+
+ipcMain.handle('serial:halt', async () => {
+  if (serial.port?.isOpen) {
+    await sendHaltCommands(serial.port, false);
+  }
   return true;
 });
 

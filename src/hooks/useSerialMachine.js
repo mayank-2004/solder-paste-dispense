@@ -4,25 +4,12 @@ export function useSerialMachine() {
   const [isSerialConnected, setIsSerialConnected] = useState(false);
   const [machinePos, setMachinePos] = useState({ x: 0, y: 0, z: 0 });
   const [isEmergencyStopped, setIsEmergencyStopped] = useState(false);
-  const statusIntervalRef = useRef(null);
-
   const handleSerialConnect = (status) => {
     setIsSerialConnected(status);
-    if (status) {
-      if (statusIntervalRef.current) clearInterval(statusIntervalRef.current);
-      statusIntervalRef.current = setInterval(async () => {
-        try {
-          if (window.serial?.writeLine) await window.serial.writeLine('M114');
-        } catch (e) { console.error('Status poll failed:', e); }
-      }, 500);
-    } else {
-      if (statusIntervalRef.current) clearInterval(statusIntervalRef.current);
-    }
   };
 
   const handleSerialDisconnect = () => {
     setIsSerialConnected(false);
-    if (statusIntervalRef.current) clearInterval(statusIntervalRef.current);
   };
 
   const triggerEmergencyStop = async () => {
@@ -35,7 +22,7 @@ export function useSerialMachine() {
         await window.serial.writeLine('!');
         await window.serial.writeLine('M0');
         await window.serial.writeLine('G91');
-        await window.serial.writeLine('G0 Z10 F1000');
+        await window.serial.writeLine('G0 Z10 F300');
         await window.serial.writeLine('G90');
       }
     } catch (err) { console.error('[E-STOP] Failed to send stop commands:', err); }
@@ -71,7 +58,6 @@ export function useSerialMachine() {
         if (x !== null && y !== null && z !== null) setMachinePos({ x, y, z });
       });
     }
-    return () => { if (statusIntervalRef.current) clearInterval(statusIntervalRef.current); };
   }, []);
 
   return {

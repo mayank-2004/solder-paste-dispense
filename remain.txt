@@ -120,3 +120,30 @@ The Pi needs to be physically mounted on or near the dispenser so the camera cab
 
 Python vision server.py file - 
 For the packaged build, you'll need to include python-vision/ in extraResources in your electron-builder config so it lands in process.resourcesPath.
+
+
+
+
+
+
+
+
+1. Marlin Firmware (Configuration.h & Configuration_adv.h)
+This is the absolute physical limit imposed by the Arduino brain:
+
+Max Speed Limit (X/Y): 150 mm/s (9,000 mm/min)
+Max Speed Limit (Z): 15 mm/s (900 mm/min)
+Homing Speed (X/Y): 40 mm/s (2,400 mm/min) — (This is the speed it travels when you click auto-home)
+Homing Speed (Z): 10 mm/s (600 mm/min)
+LCD Panel Manual Jog Speed: 50 mm/s (3,000 mm/min)
+Acceleration (X/Y): 200 mm/s² — (This is what I just lowered from 500 to stop the jerking)
+Acceleration (Z): 50 mm/s²
+2. React App (AutomatedDispensingPanel.jsx & dispensingSequence.js)
+This is the speed the app requests the machine to move at during different operations. (It will never exceed the Marlin max limits above):
+
+UI Jog Buttons (X/Y): 2,000 mm/min (33.3 mm/s) — (When you click the on-screen jog arrows)
+UI Jog Buttons (Z): 500 mm/min (8.3 mm/s)
+Camera "Go To Pad" Speed: 4,000 to 6,000 mm/min (66 to 100 mm/s)
+Automated Job Travel Speed (X/Y): 3,000 mm/min (50 mm/s) — (Speed it travels between components while dispensing)
+Automated Job Z-Plunge Speed: 600 mm/min (10 mm/s) — (Speed it lowers the nozzle to dispense)
+Continuous Bead Dispensing Speed: 500 mm/min (8.3 mm/s) — (Speed it drags the nozzle while glue flows)

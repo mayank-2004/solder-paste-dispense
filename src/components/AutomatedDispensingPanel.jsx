@@ -754,20 +754,19 @@ export default function AutomatedDispensingPanel({
 
           for (let f of solvedFiducials) {
             if (!isJobRunningRef.current) throw new Error("Job Aborted");
-
-            // 1. Where do we EXPECT this fiducial to be in machine space?
-            //    The transform maps design → camera machine coords directly.
             const expectedMachine = applyTransform(transform, f.design);
-
-            console.log(`[Dynamic Vision] Moving camera to expected fiducial ${f.id}: X${expectedMachine.x.toFixed(3)} Y${expectedMachine.y.toFixed(3)}`);
             await sendGcodeWait(`G1 Z${safeTravelHeight} F3000`);
-            await sendGcodeWait(`G1 X${expectedMachine.x.toFixed(3)} Y${expectedMachine.y.toFixed(3)} F4000`);
-
-            // 2. Wait for camera mechanics to settle
+            // M204 T sets the travel (non-printing) acceleration limit.
+            // Capping it at 500 mm/s² here prevents the stepper from jerking
+            // when jumping to a new fiducial position from a standstill.
+            await sendGcodeWait('M204 T500');
+            const fidTravelSpeed = speedSettings?.travelSpeed || 2000;
+            await sendGcodeWait(`G1 X${expectedMachine.x.toFixed(3)} Y${expectedMachine.y.toFixed(3)} F${fidTravelSpeed}`);
+            // Restore higher travel accel for dispensing moves
+            await sendGcodeWait('M204 T1000');
             await sendGcodeWait('M400');
             await new Promise(r => setTimeout(r, 800));
 
-            // 3. Snap via vision API
             if (window.__SNAP_FIDUCIAL_MACHINE_COORD__) {
               let snap = null;
               for (let attempt = 1; attempt <= 3; attempt++) {

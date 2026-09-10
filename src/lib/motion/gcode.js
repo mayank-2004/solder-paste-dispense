@@ -6,7 +6,7 @@ export const defaultAxisMap = {
 };
 
 export const defaultFeeds = {
-  travel: { X: 9000, Y: 9000, Z: 600, R: 1800 }, // mm/min
+  travel: { X: 2000, Y: 2000, Z: 400, R: 400 }, // mm/min — smooth travel, avoids jerk on acceleration
   work: { X: 1500, Y: 1500, Z: 300, R: 600 },
 };
 
@@ -58,8 +58,11 @@ export function jogRel({ dx, dy, dz, dr, feed }, axisMap = defaultAxisMap) {
   if (dr) parts.push(`${axisMap.R}${fmt(dr)}`);
   if (!parts.length) return [];
   const f = feed != null ? ` F${Math.max(1, Math.round(feed))}` : "";
-  // Bundle into a single string with newlines to prevent async interleaving race conditions!
-  return [`G91\nG1 ${parts.join(" ")}${f}\nG90`];
+  // IMPORTANT: G91 and G1 are returned as SEPARATE array elements.
+  // Each element is sent as its own writeLine() call so the firmware serial
+  // parser receives them on separate lines — prevents command merging that
+  // causes sudden uncontrolled motion (jerk).
+  return ['G91', `G1 ${parts.join(" ")}${f}`];
 }
 
 export function dwell(ms = 50) {

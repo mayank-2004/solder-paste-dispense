@@ -48,10 +48,10 @@ export function getZOffsetForPoint(x, y) { return interpolateZ(_meshRef, x, y); 
 
 // ─── Flow steps ───────────────────────────────────────────────────────────────
 const FLOW = {
-  IDLE:       'idle',
-  ANCHOR:     'anchor',   // user jogs to PCB BL corner
-  PROBING:    'probing',  // auto-stepping through 5 points
-  DONE:       'done',
+  IDLE: 'idle',
+  ANCHOR: 'anchor',   // user jogs to PCB BL corner
+  PROBING: 'probing',  // auto-stepping through 5 points
+  DONE: 'done',
 };
 
 // ─── Small reusable UI pieces ─────────────────────────────────────────────────
@@ -86,12 +86,14 @@ function InlineJog({ onSend, disabled }) {
   }, [onSend]);
 
   const jogXY = (axis, dir) => send(`G91\nG1 ${axis}${(dir * step).toFixed(3)} F1500\nG90`);
-  const jogZ  = (dir)       => send(`G91\nG1 Z${(dir * 0.5).toFixed(3)} F300\nG90`);
+  const jogZ = (dir) => send(`G91\nG1 Z${(dir * 0.5).toFixed(3)} F300\nG90`);
 
   const btn = (label, onClick, w = 44) => (
     <button onClick={onClick} disabled={disabled}
-      style={{ width: w, height: 36, background: '#1e2a3a', color: '#9cf', border: '1px solid #334',
-        borderRadius: 4, cursor: disabled ? 'not-allowed' : 'pointer', fontSize: '0.8em', fontWeight: 'bold' }}>
+      style={{
+        width: w, height: 36, background: '#1e2a3a', color: '#9cf', border: '1px solid #334',
+        borderRadius: 4, cursor: disabled ? 'not-allowed' : 'pointer', fontSize: '0.8em', fontWeight: 'bold'
+      }}>
       {label}
     </button>
   );
@@ -102,8 +104,10 @@ function InlineJog({ onSend, disabled }) {
         <span style={{ fontSize: '0.78em', color: '#888' }}>Step:</span>
         {[0.1, 0.5, 1, 5, 10].map(s => (
           <button key={s} onClick={() => setStep(s)}
-            style={{ padding: '3px 8px', fontSize: '0.78em', background: step === s ? '#00c49a' : '#1e1e1e',
-              color: step === s ? '#000' : '#aaa', border: '1px solid #444', borderRadius: 3, cursor: 'pointer' }}>
+            style={{
+              padding: '3px 8px', fontSize: '0.78em', background: step === s ? '#00c49a' : '#1e1e1e',
+              color: step === s ? '#000' : '#aaa', border: '1px solid #444', borderRadius: 3, cursor: 'pointer'
+            }}>
             {s}mm
           </button>
         ))}
@@ -111,21 +115,155 @@ function InlineJog({ onSend, disabled }) {
       {/* XY grid */}
       <div style={{ display: 'grid', gridTemplateColumns: '44px 44px 44px', gridTemplateRows: '36px 36px 36px', gap: 3 }}>
         <div />
-        {btn('Y+', () => jogXY('Y',  1))}
+        {btn('Y+', () => jogXY('Y', 1))}
         <div />
         {btn('X-', () => jogXY('X', -1))}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center',
-          background: '#111', borderRadius: 4, fontSize: '0.7em', color: '#555' }}>XY</div>
-        {btn('X+', () => jogXY('X',  1))}
+        <div style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          background: '#111', borderRadius: 4, fontSize: '0.7em', color: '#555'
+        }}>XY</div>
+        {btn('X+', () => jogXY('X', 1))}
         <div />
         {btn('Y-', () => jogXY('Y', -1))}
         <div />
       </div>
       {/* Z */}
       <div style={{ display: 'flex', gap: 3, marginTop: 3 }}>
-        {btn('Z+', () => jogZ( 1), 66)}
+        {btn('Z+', () => jogZ(1), 66)}
         {btn('Z-', () => jogZ(-1), 66)}
         <span style={{ fontSize: '0.72em', color: '#555', alignSelf: 'center', marginLeft: 4 }}>0.5mm / click</span>
+      </div>
+    </div>
+  );
+}
+
+// ─── Height Map Visualizer ───────────────────────────────────────────────────
+function HeightMapVisualizer({ mesh, boardOutline }) {
+  if (!mesh || mesh.length === 0) return null;
+  const calibrated = mesh.filter(p => p.zParam !== 0);
+  if (calibrated.length === 0) return null;
+
+  const SVG_W = 280, SVG_H = 180, PAD = 28;
+
+  // Use design-space positions for layout; fall back to machine coords
+  const pts = mesh.map(p => ({ ...p, px: p.designX ?? p.x, py: p.designY ?? p.y }));
+
+  // Board outline bounds
+  let minX, maxX, minY, maxY;
+  if (boardOutline) {
+    minX = boardOutline.minX ?? 0;
+    minY = boardOutline.minY ?? 0;
+    maxX = boardOutline.maxX ?? (minX + (boardOutline.width ?? 100));
+    maxY = boardOutline.maxY ?? (minY + (boardOutline.height ?? 100));
+  } else {
+    minX = Math.min(...pts.map(p => p.px));
+    maxX = Math.max(...pts.map(p => p.px));
+    minY = Math.min(...pts.map(p => p.py));
+    maxY = Math.max(...pts.map(p => p.py));
+  }
+  const rangeX = maxX - minX || 1;
+  const rangeY = maxY - minY || 1;
+
+  // Convert design coords → SVG pixel coords
+  const toSvg = (px, py) => ({
+    x: PAD + ((px - minX) / rangeX) * (SVG_W - 2 * PAD),
+    y: PAD + ((py - minY) / rangeY) * (SVG_H - 2 * PAD),
+  });
+
+  // Z → colour: blue (low) → green (mid) → red (high)
+  const zVals = calibrated.map(p => p.zParam);
+  const zMin = Math.min(...zVals);
+  const zMax = Math.max(...zVals);
+  const zRange = zMax - zMin || 0.001;
+  const zToColor = z => {
+    const t = Math.max(0, Math.min(1, (z - zMin) / zRange));
+    let r, g, b;
+    if (t < 0.5) {
+      const s = t * 2;
+      r = 0; g = Math.round(120 + s * 80); b = Math.round(255 - s * 155);
+    } else {
+      const s = (t - 0.5) * 2;
+      r = Math.round(s * 255); g = Math.round(200 - s * 150); b = Math.round(100 - s * 100);
+    }
+    return `rgb(${r},${g},${b})`;
+  };
+
+  return (
+    <div style={{ marginTop: 14 }}>
+      <div style={{ fontSize: '0.82em', color: '#8b949e', marginBottom: 6, fontWeight: 600, letterSpacing: '0.03em' }}>
+        📊 Surface Height Map
+      </div>
+      <svg width={SVG_W} height={SVG_H}
+        style={{ background: '#0d1117', borderRadius: 8, border: '1px solid #21262d', display: 'block' }}>
+
+        {/* Board outline */}
+        <rect x={PAD} y={PAD} width={SVG_W - 2 * PAD} height={SVG_H - 2 * PAD}
+          fill="rgba(48,54,61,0.25)" stroke="#30363d" strokeWidth="1.5" strokeDasharray="5,3" rx="2" />
+
+        {/* Connecting lines between every pair of calibrated points */}
+        {calibrated.map((a, i) =>
+          calibrated.slice(i + 1).map((b, j) => {
+            const sa = toSvg(a.designX ?? a.x, a.designY ?? a.y);
+            const sb = toSvg(b.designX ?? b.x, b.designY ?? b.y);
+            const midColor = zToColor((a.zParam + b.zParam) / 2);
+            return <line key={`ln-${i}-${j}`}
+              x1={sa.x} y1={sa.y} x2={sb.x} y2={sb.y}
+              stroke={midColor} strokeWidth="1.5" strokeOpacity="0.35" />;
+          })
+        )}
+
+        {/* Probe point circles + labels */}
+        {pts.map(pt => {
+          const s = toSvg(pt.px, pt.py);
+          const done = pt.zParam !== 0;
+          const col = done ? zToColor(pt.zParam) : '#30363d';
+          const shortName = pt.name
+            .replace('Bottom-Left', 'BL').replace('Bottom-Right', 'BR')
+            .replace('Top-Left', 'TL').replace('Top-Right', 'TR')
+            .replace('Center', 'CTR');
+          return (
+            <g key={pt.id}>
+              {/* Outer glow ring */}
+              <circle cx={s.x} cy={s.y} r={16} fill={col} fillOpacity={done ? 0.12 : 0.04}
+                stroke={col} strokeWidth={done ? 1.5 : 0.5} strokeOpacity={done ? 0.6 : 0.2} />
+              {/* Centre dot */}
+              <circle cx={s.x} cy={s.y} r={5} fill={done ? col : '#21262d'}
+                stroke={done ? col : '#30363d'} strokeWidth="1" />
+              {/* Point name above */}
+              <text x={s.x} y={s.y - 20} textAnchor="middle"
+                fill="#8b949e" fontSize="9" fontFamily="monospace">
+                {shortName}
+              </text>
+              {/* Z value below */}
+              {done && (
+                <text x={s.x} y={s.y + 24} textAnchor="middle"
+                  fill={col} fontSize="9" fontFamily="monospace" fontWeight="bold">
+                  {pt.zParam.toFixed(3)}
+                </text>
+              )}
+            </g>
+          );
+        })}
+      </svg>
+
+      {/* Gradient legend */}
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 6, marginTop: 7,
+        fontSize: '0.73em', color: '#8b949e', width: SVG_W
+      }}>
+        <span style={{ color: 'rgb(0,120,255)', flexShrink: 0 }}>▬ Low</span>
+        <div style={{
+          flex: 1, height: 5, borderRadius: 3,
+          background: 'linear-gradient(to right,rgb(0,120,255),rgb(0,200,100),rgb(255,50,0))'
+        }} />
+        <span style={{ color: 'rgb(255,50,0)', flexShrink: 0 }}>High ▬</span>
+      </div>
+      <div style={{
+        display: 'flex', justifyContent: 'space-between', width: SVG_W,
+        fontSize: '0.70em', color: '#555', marginTop: 2
+      }}>
+        <span>{zMin.toFixed(3)} mm</span>
+        <span>{zMax.toFixed(3)} mm</span>
       </div>
     </div>
   );
@@ -146,7 +284,7 @@ export default function BedCalibrationPanel({
     try {
       const s = JSON.parse(localStorage.getItem('bedLevelMesh'));
       if (Array.isArray(s) && s.length > 0) return s;
-    } catch (_) {}
+    } catch (_) { }
     return [];
   });
   useEffect(() => { _meshRef = mesh; }, [mesh]);
@@ -154,36 +292,36 @@ export default function BedCalibrationPanel({
 
   // ── Probe settings ──────────────────────────────────────────────────────────
   const ls = (k, d) => { try { return parseFloat(localStorage.getItem(k) ?? d); } catch { return parseFloat(d); } };
-  const [probeStartZ,   setProbeStartZ]   = useState(() => ls('probeStartZ',   '3'));
-  const [stepSize,      setStepSize]      = useState(() => ls('probeStepSize', '0.1'));
-  const [probeSpeed,    setProbeSpeed]    = useState(() => ls('probeSpeed',    '60'));
-  const [maxDepth,      setMaxDepth]      = useState(() => ls('probeMaxDepth', '-5'));
+  const [probeStartZ, setProbeStartZ] = useState(() => ls('probeStartZ', '3'));
+  const [stepSize, setStepSize] = useState(() => ls('probeStepSize', '0.1'));
+  const [probeSpeed, setProbeSpeed] = useState(() => ls('probeSpeed', '60'));
+  const [maxDepth, setMaxDepth] = useState(() => ls('probeMaxDepth', '-5'));
   const [dispensingGap, setDispensingGap] = useState(() => ls('dispensingGap', '0.1'));
-  const [liftHeight,    setLiftHeight]    = useState(() => ls('liftHeight',    '5'));
-  const [edgeInset,     setEdgeInset]     = useState(() => ls('pcbProbeEdgeInset', '5'));
+  const [liftHeight, setLiftHeight] = useState(() => ls('liftHeight', '5'));
+  const [edgeInset, setEdgeInset] = useState(() => ls('pcbProbeEdgeInset', '5'));
 
-  useEffect(() => { localStorage.setItem('probeStartZ',        String(probeStartZ));   }, [probeStartZ]);
-  useEffect(() => { localStorage.setItem('probeStepSize',      String(stepSize));      }, [stepSize]);
-  useEffect(() => { localStorage.setItem('probeSpeed',         String(probeSpeed));    }, [probeSpeed]);
-  useEffect(() => { localStorage.setItem('probeMaxDepth',      String(maxDepth));      }, [maxDepth]);
-  useEffect(() => { localStorage.setItem('dispensingGap',      String(dispensingGap)); }, [dispensingGap]);
-  useEffect(() => { localStorage.setItem('liftHeight',         String(liftHeight));    }, [liftHeight]);
-  useEffect(() => { localStorage.setItem('pcbProbeEdgeInset',  String(edgeInset));     }, [edgeInset]);
+  useEffect(() => { localStorage.setItem('probeStartZ', String(probeStartZ)); }, [probeStartZ]);
+  useEffect(() => { localStorage.setItem('probeStepSize', String(stepSize)); }, [stepSize]);
+  useEffect(() => { localStorage.setItem('probeSpeed', String(probeSpeed)); }, [probeSpeed]);
+  useEffect(() => { localStorage.setItem('probeMaxDepth', String(maxDepth)); }, [maxDepth]);
+  useEffect(() => { localStorage.setItem('dispensingGap', String(dispensingGap)); }, [dispensingGap]);
+  useEffect(() => { localStorage.setItem('liftHeight', String(liftHeight)); }, [liftHeight]);
+  useEffect(() => { localStorage.setItem('pcbProbeEdgeInset', String(edgeInset)); }, [edgeInset]);
 
   // ── Flow state ──────────────────────────────────────────────────────────────
-  const [flowStep,      setFlowStep]      = useState(FLOW.IDLE);
-  const [probeMode,     setProbeMode]     = useState('auto');   // 'auto' | 'manual'
-  const [statusMsg,     setStatus]        = useState('');
-  const [progress,      setProgress]      = useState(0);
-  const [currentPtIdx,  setCurrentPtIdx]  = useState(-1);
-  const [pcbOrigin,     setPcbOrigin]     = useState(null);     // machine coords of PCB (0,0)
+  const [flowStep, setFlowStep] = useState(FLOW.IDLE);
+  const [probeMode, setProbeMode] = useState('auto');   // 'auto' | 'manual'
+  const [statusMsg, setStatus] = useState('');
+  const [progress, setProgress] = useState(0);
+  const [currentPtIdx, setCurrentPtIdx] = useState(-1);
+  const [pcbOrigin, setPcbOrigin] = useState(null);     // machine coords of PCB (0,0)
 
   // Manual mode
-  const [manualIdx,     setManualIdx]     = useState(-1);
-  const [manualStatus,  setManualStatus]  = useState('Idle.');
+  const [manualIdx, setManualIdx] = useState(-1);
+  const [manualStatus, setManualStatus] = useState('Idle.');
 
-  const abortRef    = useRef(false);
-  const mPosRef     = useRef(machinePosition);
+  const abortRef = useRef(false);
+  const mPosRef = useRef(machinePosition);
   useEffect(() => { mPosRef.current = machinePosition; }, [machinePosition]);
 
   // ── Send helper ───────────────────────────────────────────────────────────────
@@ -210,18 +348,18 @@ export default function BedCalibrationPanel({
 
     const minX = boardOutline.minX ?? 0;
     const minY = boardOutline.minY ?? 0;
-    const maxX = boardOutline.maxX ?? (minX + (boardOutline.width  ?? 100));
+    const maxX = boardOutline.maxX ?? (minX + (boardOutline.width ?? 100));
     const maxY = boardOutline.maxY ?? (minY + (boardOutline.height ?? 100));
     const w = maxX - minX, h = maxY - minY;
     const cx = (minX + maxX) / 2, cy = (minY + maxY) / 2;
     const ins = Math.min(edgeInset, w * 0.4, h * 0.4); // safety clamp
 
     const designPts = [
-      { id: 'BL', name: 'Bottom-Left',  x: minX + ins, y: minY + ins },
+      { id: 'BL', name: 'Bottom-Left', x: minX + ins, y: minY + ins },
       { id: 'BR', name: 'Bottom-Right', x: maxX - ins, y: minY + ins },
-      { id: 'TR', name: 'Top-Right',    x: maxX - ins, y: maxY - ins },
-      { id: 'TL', name: 'Top-Left',     x: minX + ins, y: maxY - ins },
-      { id: 'C',  name: 'Center',       x: cx,         y: cy         },
+      { id: 'TR', name: 'Top-Right', x: maxX - ins, y: maxY - ins },
+      { id: 'TL', name: 'Top-Left', x: minX + ins, y: maxY - ins },
+      { id: 'C', name: 'Center', x: cx, y: cy },
     ];
 
     return designPts.map(p => {
@@ -247,7 +385,7 @@ export default function BedCalibrationPanel({
   // FLOW STEP 1: Start — check preconditions then enter ANCHOR step
   // ─────────────────────────────────────────────────────────────────────────────
   const startLevelingFlow = useCallback(() => {
-    if (!isConnected)  { toast.warning('Connect the machine first.'); return; }
+    if (!isConnected) { toast.warning('Connect the machine first.'); return; }
     if (!boardOutline) { toast.warning('Load a Gerber board outline file first (must include an outline/edge layer).'); return; }
 
     abortRef.current = false;
@@ -295,7 +433,7 @@ export default function BedCalibrationPanel({
 
     setMesh(pts);
     setStatus(`PCB origin set at machine (${origin.x.toFixed(2)}, ${origin.y.toFixed(2)}). ` +
-              `${pts.length} probe points generated. Ready to probe.`);
+      `${pts.length} probe points generated. Ready to probe.`);
 
     // Lift nozzle to safe height before probing begins
     await send(`G1 Z${liftHeight} F600`);
@@ -316,16 +454,16 @@ export default function BedCalibrationPanel({
   // ─────────────────────────────────────────────────────────────────────────────
   const pollEndstop = (timeoutMs = 600) =>
     new Promise(resolve => {
-      const onTrig = () => { cleanup(); resolve(true);  };
+      const onTrig = () => { cleanup(); resolve(true); };
       const onOpen = () => { cleanup(); resolve(false); };
-      const timer  = setTimeout(() => { cleanup(); resolve(false); }, timeoutMs);
+      const timer = setTimeout(() => { cleanup(); resolve(false); }, timeoutMs);
       const cleanup = () => {
         window.removeEventListener('endstop-z-probe-triggered', onTrig);
-        window.removeEventListener('endstop-z-probe-open',      onOpen);
+        window.removeEventListener('endstop-z-probe-open', onOpen);
         clearTimeout(timer);
       };
       window.addEventListener('endstop-z-probe-triggered', onTrig, { once: true });
-      window.addEventListener('endstop-z-probe-open',      onOpen, { once: true });
+      window.addEventListener('endstop-z-probe-open', onOpen, { once: true });
     });
 
   // ─────────────────────────────────────────────────────────────────────────────
@@ -479,7 +617,7 @@ export default function BedCalibrationPanel({
   // ─────────────────────────────────────────────────────────────────────────────
   const abortFlow = useCallback(async () => {
     abortRef.current = true;
-    try { await send('M211 S1'); } catch (_) {}
+    try { await send('M211 S1'); } catch (_) { }
     setFlowStep(FLOW.IDLE);
     setCurrentPtIdx(-1);
     setManualIdx(-1);
@@ -504,8 +642,8 @@ export default function BedCalibrationPanel({
 
   // ── Derived ─────────────────────────────────────────────────────────────────
   const calibratedCount = mesh.filter(p => p.zParam !== 0).length;
-  const meshCalibrated  = calibratedCount === mesh.length && mesh.length > 0;
-  const zVals  = mesh.filter(p => p.zParam !== 0).map(p => p.zParam);
+  const meshCalibrated = calibratedCount === mesh.length && mesh.length > 0;
+  const zVals = mesh.filter(p => p.zParam !== 0).map(p => p.zParam);
   const zRange = zVals.length >= 2
     ? (Math.max(...zVals) - Math.min(...zVals)).toFixed(3)
     : null;
@@ -515,24 +653,30 @@ export default function BedCalibrationPanel({
   // ─────────────────────────────────────────────────────────────────────────────
 
   const probePointRow = (pt, idx) => {
-    const isActive  = currentPtIdx === idx;
-    const isDone    = pt.zParam !== 0;
-    const dotColor  = isActive ? '#ffaa00' : isDone ? '#00c49a' : '#444';
+    const isActive = currentPtIdx === idx;
+    const isDone = pt.zParam !== 0;
+    const dotColor = isActive ? '#ffaa00' : isDone ? '#00c49a' : '#444';
     return (
-      <tr key={pt.id} style={{ borderTop: '1px solid #2a2a2a',
-        background: isActive ? 'rgba(255,170,0,0.10)' : 'transparent' }}>
+      <tr key={pt.id} style={{
+        borderTop: '1px solid #2a2a2a',
+        background: isActive ? 'rgba(255,170,0,0.10)' : 'transparent'
+      }}>
         <td style={{ padding: '5px 8px' }}>
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-            <span style={{ width: 10, height: 10, borderRadius: '50%', background: dotColor,
-              boxShadow: isActive ? '0 0 6px #ffaa00' : 'none', flexShrink: 0 }} />
+            <span style={{
+              width: 10, height: 10, borderRadius: '50%', background: dotColor,
+              boxShadow: isActive ? '0 0 6px #ffaa00' : 'none', flexShrink: 0
+            }} />
             <span style={{ fontSize: '0.85em' }}>{pt.name}</span>
           </span>
         </td>
         <td style={{ padding: '5px 8px', fontFamily: 'monospace', fontSize: '0.82em', color: '#aaa' }}>
           {pt.x?.toFixed(2) ?? '—'}, {pt.y?.toFixed(2) ?? '—'}
         </td>
-        <td style={{ padding: '5px 8px', fontWeight: 'bold', fontFamily: 'monospace',
-          color: isActive ? '#ffaa00' : isDone ? '#00c49a' : '#555' }}>
+        <td style={{
+          padding: '5px 8px', fontWeight: 'bold', fontFamily: 'monospace',
+          color: isActive ? '#ffaa00' : isDone ? '#00c49a' : '#555'
+        }}>
           {isDone ? `${pt.zParam.toFixed(3)} mm` : isActive ? '…' : '—'}
         </td>
       </tr>
@@ -553,8 +697,10 @@ export default function BedCalibrationPanel({
         </div>
         {flowStep !== FLOW.IDLE && (
           <button onClick={resetFlow}
-            style={{ fontSize: '0.75em', padding: '4px 10px', background: '#2a1010',
-              border: '1px solid #c0392b', color: '#c0392b', borderRadius: 4, cursor: 'pointer' }}>
+            style={{
+              fontSize: '0.75em', padding: '4px 10px', background: '#2a1010',
+              border: '1px solid #c0392b', color: '#c0392b', borderRadius: 4, cursor: 'pointer'
+            }}>
             ✕ Reset
           </button>
         )}
@@ -563,21 +709,27 @@ export default function BedCalibrationPanel({
       {/* ── Mesh summary badge ── */}
       {mesh.length > 0 && (
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12, marginTop: 8 }}>
-          <span style={{ fontSize: '0.78em', padding: '3px 8px', borderRadius: 10,
+          <span style={{
+            fontSize: '0.78em', padding: '3px 8px', borderRadius: 10,
             background: meshCalibrated ? '#0d3320' : '#1a2a1a',
             border: `1px solid ${meshCalibrated ? '#00c49a' : '#3a5a3a'}`,
-            color: meshCalibrated ? '#00c49a' : '#5a9a5a' }}>
+            color: meshCalibrated ? '#00c49a' : '#5a9a5a'
+          }}>
             {calibratedCount}/{mesh.length} points probed
           </span>
           {zRange && (
-            <span style={{ fontSize: '0.78em', padding: '3px 8px', borderRadius: 10,
-              background: '#1a1a00', border: '1px solid #555500', color: '#cccc00' }}>
+            <span style={{
+              fontSize: '0.78em', padding: '3px 8px', borderRadius: 10,
+              background: '#1a1a00', border: '1px solid #555500', color: '#cccc00'
+            }}>
               PCB warp: {zRange} mm
             </span>
           )}
           {meshCalibrated && (
-            <span style={{ fontSize: '0.78em', padding: '3px 8px', borderRadius: 10,
-              background: '#001a2a', border: '1px solid #005588', color: '#00aaff' }}>
+            <span style={{
+              fontSize: '0.78em', padding: '3px 8px', borderRadius: 10,
+              background: '#001a2a', border: '1px solid #005588', color: '#00aaff'
+            }}>
               ✅ Z-compensation active
             </span>
           )}
@@ -593,30 +745,34 @@ export default function BedCalibrationPanel({
           <div style={{ display: 'flex', marginBottom: 12, border: '1px solid #333', borderRadius: 6, overflow: 'hidden' }}>
             {['auto', 'manual'].map(m => (
               <button key={m} onClick={() => setProbeMode(m)}
-                style={{ flex: 1, padding: 8, border: 'none', cursor: 'pointer',
+                style={{
+                  flex: 1, padding: 8, border: 'none', cursor: 'pointer',
                   background: probeMode === m ? '#00c49a' : '#1e1e1e',
-                  color:      probeMode === m ? '#000'    : '#aaa',
-                  fontWeight: probeMode === m ? 'bold'    : 'normal', fontSize: '0.88em' }}>
+                  color: probeMode === m ? '#000' : '#aaa',
+                  fontWeight: probeMode === m ? 'bold' : 'normal', fontSize: '0.88em'
+                }}>
                 {m === 'auto' ? '⚡ Auto (pressure sensor)' : '🖐 Manual (jog)'}
               </button>
             ))}
           </div>
 
           {/* Settings */}
-          <div style={{ background: '#131320', border: '1px solid #1a2a4a', borderRadius: 8,
-            padding: 12, marginBottom: 14 }}>
+          <div style={{
+            background: '#131320', border: '1px solid #1a2a4a', borderRadius: 8,
+            padding: 12, marginBottom: 14
+          }}>
             <h4 style={{ margin: '0 0 10px 0', color: '#64b5f6', fontSize: '0.88em' }}>
               ⚙️ {probeMode === 'auto' ? 'Auto-Probe' : 'Manual'} Settings
             </h4>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-              <Field label="Start Z (mm)"        value={probeStartZ}   onChange={setProbeStartZ}   step={0.5}  min={0}    max={20}  unit="mm" />
-              <Field label="Edge Inset (mm)"      value={edgeInset}     onChange={setEdgeInset}     step={1}    min={0}    max={30}  unit="mm" />
-              <Field label="Dispense Gap (mm)"    value={dispensingGap} onChange={setDispensingGap} step={0.05} min={0}    max={2}   unit="mm" />
-              <Field label="Travel Lift (mm)"     value={liftHeight}    onChange={setLiftHeight}    step={0.5}  min={1}    max={20}  unit="mm" />
+              <Field label="Start Z (mm)" value={probeStartZ} onChange={setProbeStartZ} step={0.5} min={0} max={20} unit="mm" />
+              <Field label="Edge Inset (mm)" value={edgeInset} onChange={setEdgeInset} step={1} min={0} max={30} unit="mm" />
+              <Field label="Dispense Gap (mm)" value={dispensingGap} onChange={setDispensingGap} step={0.05} min={0} max={2} unit="mm" />
+              <Field label="Travel Lift (mm)" value={liftHeight} onChange={setLiftHeight} step={0.5} min={1} max={20} unit="mm" />
               {probeMode === 'auto' && <>
-                <Field label="Step Size (mm)"       value={stepSize}      onChange={setStepSize}      step={0.025} min={0.025} max={0.5} unit="mm" />
-                <Field label="Speed (mm/min)"        value={probeSpeed}    onChange={setProbeSpeed}    step={10}   min={10}   max={300} unit="mm/min" />
-                <Field label="Max Depth (mm)"        value={maxDepth}      onChange={setMaxDepth}      step={0.5}  min={-20}  max={0}   unit="mm" />
+                <Field label="Step Size (mm)" value={stepSize} onChange={setStepSize} step={0.025} min={0.025} max={0.5} unit="mm" />
+                <Field label="Speed (mm/min)" value={probeSpeed} onChange={setProbeSpeed} step={10} min={10} max={300} unit="mm/min" />
+                <Field label="Max Depth (mm)" value={maxDepth} onChange={setMaxDepth} step={0.5} min={-20} max={0} unit="mm" />
               </>}
             </div>
           </div>
@@ -650,8 +806,10 @@ export default function BedCalibrationPanel({
           </Btn>
 
           {mesh.length > 0 && calibratedCount > 0 && (
-            <div style={{ marginTop: 12, background: '#1a1a1a', borderRadius: 6,
-              padding: 10, border: '1px solid #333' }}>
+            <div style={{
+              marginTop: 12, background: '#1a1a1a', borderRadius: 6,
+              padding: 10, border: '1px solid #333'
+            }}>
               <h4 style={{ margin: '0 0 8px 0', fontSize: '0.85em', color: '#888' }}>
                 Previous Calibration
               </h4>
@@ -665,6 +823,7 @@ export default function BedCalibrationPanel({
                 </thead>
                 <tbody>{mesh.map(probePointRow)}</tbody>
               </table>
+              <HeightMapVisualizer mesh={mesh} boardOutline={boardOutline} />
             </div>
           )}
         </div>
@@ -675,8 +834,10 @@ export default function BedCalibrationPanel({
       ════════════════════════════════════════════════════════════════════════ */}
       {flowStep === FLOW.ANCHOR && (
         <div>
-          <div style={{ background: '#0d1f0d', border: '1px solid #1a4a1a',
-            borderRadius: 8, padding: 14, marginBottom: 12 }}>
+          <div style={{
+            background: '#0d1f0d', border: '1px solid #1a4a1a',
+            borderRadius: 8, padding: 14, marginBottom: 12
+          }}>
             <h4 style={{ color: '#00c49a', margin: '0 0 8px 0', fontSize: '0.95em' }}>
               📍 Step 1 of 2 — Set PCB Origin
             </h4>
@@ -689,8 +850,10 @@ export default function BedCalibrationPanel({
             </p>
 
             {/* Live position readout */}
-            <div style={{ display: 'flex', gap: 12, fontFamily: 'monospace', fontSize: '0.85em',
-              background: '#111', padding: '6px 10px', borderRadius: 4, marginBottom: 10 }}>
+            <div style={{
+              display: 'flex', gap: 12, fontFamily: 'monospace', fontSize: '0.85em',
+              background: '#111', padding: '6px 10px', borderRadius: 4, marginBottom: 10
+            }}>
               <span>X <strong style={{ color: '#0f0' }}>{machinePosition.x.toFixed(3)}</strong></span>
               <span>Y <strong style={{ color: '#0f0' }}>{machinePosition.y.toFixed(3)}</strong></span>
               <span>Z <strong style={{ color: '#0f0' }}>{machinePosition.z.toFixed(3)}</strong></span>
@@ -720,30 +883,40 @@ export default function BedCalibrationPanel({
       ════════════════════════════════════════════════════════════════════════ */}
       {flowStep === FLOW.PROBING && (
         <div>
-          <div style={{ background: '#0d1926', border: '1px solid #1a3050',
-            borderRadius: 8, padding: 12, marginBottom: 12 }}>
+          <div style={{
+            background: '#0d1926', border: '1px solid #1a3050',
+            borderRadius: 8, padding: 12, marginBottom: 12
+          }}>
             <h4 style={{ color: '#64b5f6', margin: '0 0 8px 0', fontSize: '0.9em' }}>
               🔍 Step 2 of 2 — Probing PCB Surface ({probeMode === 'auto' ? 'Auto' : 'Manual'})
             </h4>
 
             {/* Progress bar */}
             <div style={{ height: 6, background: '#333', borderRadius: 3, overflow: 'hidden', marginBottom: 8 }}>
-              <div style={{ height: '100%', width: `${progress}%`,
-                background: '#00c49a', transition: 'width 0.5s ease' }} />
+              <div style={{
+                height: '100%', width: `${progress}%`,
+                background: '#00c49a', transition: 'width 0.5s ease'
+              }} />
             </div>
-            <div style={{ fontSize: '0.78em', color: '#ffaa00', padding: '7px 10px',
+            <div style={{
+              fontSize: '0.78em', color: '#ffaa00', padding: '7px 10px',
               background: '#1a1100', borderRadius: 4, border: '1px solid #443300',
-              minHeight: 32, lineHeight: 1.5 }}>
+              minHeight: 32, lineHeight: 1.5
+            }}>
               {statusMsg || 'Starting…'}
             </div>
           </div>
 
           {/* Points table — live status */}
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85em',
-            background: '#1a1a1a', borderRadius: 8, overflow: 'hidden', marginBottom: 12 }}>
+          <table style={{
+            width: '100%', borderCollapse: 'collapse', fontSize: '0.85em',
+            background: '#1a1a1a', borderRadius: 8, overflow: 'hidden', marginBottom: 12
+          }}>
             <thead>
-              <tr style={{ color: '#555', textAlign: 'left', borderBottom: '1px solid #2a2a2a',
-                background: '#111' }}>
+              <tr style={{
+                color: '#555', textAlign: 'left', borderBottom: '1px solid #2a2a2a',
+                background: '#111'
+              }}>
                 <th style={{ padding: '5px 8px' }}>Point</th>
                 <th style={{ padding: '5px 8px' }}>Machine XY</th>
                 <th style={{ padding: '5px 8px' }}>Dispense Z</th>
@@ -754,8 +927,10 @@ export default function BedCalibrationPanel({
 
           {/* Manual: live Z + Save button */}
           {probeMode === 'manual' && manualIdx >= 0 && (
-            <div style={{ background: '#1a1100', border: '1px solid #443300',
-              borderRadius: 6, padding: 12, marginBottom: 10 }}>
+            <div style={{
+              background: '#1a1100', border: '1px solid #443300',
+              borderRadius: 6, padding: 12, marginBottom: 10
+            }}>
               <div style={{ fontSize: '0.85em', color: '#ffaa00', marginBottom: 8 }}>
                 {manualStatus}
               </div>
@@ -786,8 +961,10 @@ export default function BedCalibrationPanel({
       ════════════════════════════════════════════════════════════════════════ */}
       {flowStep === FLOW.DONE && (
         <div>
-          <div style={{ background: '#0d3320', border: '1px solid #00c49a',
-            borderRadius: 8, padding: 14, marginBottom: 14, textAlign: 'center' }}>
+          <div style={{
+            background: '#0d3320', border: '1px solid #00c49a',
+            borderRadius: 8, padding: 14, marginBottom: 14, textAlign: 'center'
+          }}>
             <div style={{ fontSize: '2em', marginBottom: 6 }}>✅</div>
             <h4 style={{ color: '#00c49a', margin: '0 0 6px 0' }}>PCB Leveling Complete</h4>
             <p style={{ fontSize: '0.85em', color: '#aaa', margin: 0 }}>
@@ -799,8 +976,10 @@ export default function BedCalibrationPanel({
           </div>
 
           {/* Final mesh table */}
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85em',
-            background: '#1a1a1a', borderRadius: 8, overflow: 'hidden', marginBottom: 14 }}>
+          <table style={{
+            width: '100%', borderCollapse: 'collapse', fontSize: '0.85em',
+            background: '#1a1a1a', borderRadius: 8, overflow: 'hidden', marginBottom: 14
+          }}>
             <thead>
               <tr style={{ color: '#555', textAlign: 'left', borderBottom: '1px solid #2a2a2a', background: '#111' }}>
                 <th style={{ padding: '5px 8px' }}>Point</th>
@@ -811,7 +990,8 @@ export default function BedCalibrationPanel({
             <tbody>{mesh.map(probePointRow)}</tbody>
           </table>
 
-          <div style={{ display: 'flex', gap: 8 }}>
+          <HeightMapVisualizer mesh={mesh} boardOutline={boardOutline} />
+          <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
             <Btn onClick={() => setFlowStep(FLOW.IDLE)} color="#1565c0" textColor="#fff" style={{ flex: 1 }}>
               ← Back to Settings
             </Btn>
@@ -824,19 +1004,25 @@ export default function BedCalibrationPanel({
 
       {/* ── How it works note (always visible at bottom) ── */}
       {flowStep === FLOW.IDLE && (
-        <div style={{ marginTop: 14, padding: 10, background: '#0d1926',
+        <div style={{
+          marginTop: 14, padding: 10, background: '#0d1926',
           border: '1px solid #1a3050', borderRadius: 6, fontSize: '0.76em', color: '#5588aa',
-          lineHeight: 1.6 }}>
+          lineHeight: 1.6
+        }}>
           <strong>How it works:</strong> You jog the nozzle to the PCB bottom-left corner once to
           anchor the coordinate system. The machine then automatically drives to all 5 points
           on the PCB surface (4 corners + centre), probes the Z height at each, and builds an
-          interpolation mesh. During dispensing, <code style={{ background: '#111', padding: '1px 4px',
-          borderRadius: 3 }}>getZOffsetForPoint(x,y)</code> returns the correct Z for any pad location.
+          interpolation mesh. During dispensing, <code style={{
+            background: '#111', padding: '1px 4px',
+            borderRadius: 3
+          }}>getZOffsetForPoint(x,y)</code> returns the correct Z for any pad location.
           {probeMode === 'auto' && (
             <><br /><br />
-            <strong>Serial bridge required in SerialPanel.jsx <code>onData</code>:</strong>
-            <pre style={{ background: '#111', padding: 6, borderRadius: 3, marginTop: 4,
-              whiteSpace: 'pre-wrap', color: '#adf', fontSize: '0.95em' }}>{`if (line.includes('z_min:')) {
+              <strong>Serial bridge required in SerialPanel.jsx <code>onData</code>:</strong>
+              <pre style={{
+                background: '#111', padding: 6, borderRadius: 3, marginTop: 4,
+                whiteSpace: 'pre-wrap', color: '#adf', fontSize: '0.95em'
+              }}>{`if (line.includes('z_min:')) {
   const hit = /z_min:\\s*TRIGGERED/i.test(line);
   window.dispatchEvent(new CustomEvent(
     hit ? 'endstop-z-probe-triggered'

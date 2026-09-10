@@ -661,7 +661,9 @@ export default function AutomatedDispensingPanel({
 
   const proceedToRegistration = () => {
     setJobStage('dispensing');
-    runDispenseLoop(resumeFromPad);
+    localStorage.removeItem('resumeFromPad');
+    setResumeFromPad(0);
+    runDispenseLoop(0);
   };
 
   const runDispenseLoop = async (startFromPad = 0) => {

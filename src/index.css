@@ -494,6 +494,17 @@ label {
   letter-spacing: 0.03em;
 }
 
+/* Radio button */
+input[type="radio"] {
+  width: 16px;
+  height: 16px;
+  min-height: unset;
+  padding: 0;
+  accent-color: var(--accent-primary);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
 .dro-unit {
   font-family: var(--font-mono);
   font-size: 0.72rem;

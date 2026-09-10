@@ -50,7 +50,7 @@ function parseAllFlashes(gerberText) {
 
     // ADD using macro: %ADDnnMacroName[,params]*%
     const adMacro = block.match(/%ADD(\d+)([A-Za-z][A-Za-z0-9_]*)(?:,([^*]*))?\*%/i);
-    if (adMacro && !['C','R','O','P'].includes(adMacro[2])) {
+    if (adMacro && !['C', 'R', 'O', 'P'].includes(adMacro[2])) {
       const dCode = parseInt(adMacro[1]);
       const macroName = adMacro[2];
       const macroBody = macros.get(macroName) || '';
@@ -188,9 +188,9 @@ export function detectFiducials(gerberText, layerType = 'copper') {
 
     // Pick the tightest isolation threshold that gives us >=2 candidates
     let workingSet = isolated25.length >= 2 ? isolated25
-                   : isolated15.length >= 2 ? isolated15
-                   : isolated10.length >= 2 ? isolated10
-                   : candidates;
+      : isolated15.length >= 2 ? isolated15
+        : isolated10.length >= 2 ? isolated10
+          : candidates;
 
     console.log(`[Fid] ${layerType}: workingSet size=${workingSet.length}`);
     workingSet.forEach(c =>
@@ -245,7 +245,7 @@ export function detectFiducials(gerberText, layerType = 'copper') {
     const localGroup = bestGroup.filter(c => !isRail(c));
 
     const finalLocal = localGroup.length >= 2 ? localGroup : bestGroup;
-    const finalRail  = localGroup.length >= 2 ? railGroup : [];
+    const finalRail = localGroup.length >= 2 ? railGroup : [];
 
     const conf = Math.min(1.0, bestScore / 200);
     const toFid = (arr, prefix) => arr
@@ -270,9 +270,9 @@ export function analyzeFiducialsWithRails(layers, side = 'top') {
   console.log(`[FidAnalyze] ${side} layers:`, sideLayers.map(l => `${l.filename}(${l.type})`));
 
   // Find layers by type
-  const copperLayers   = sideLayers.filter(l => l.type === 'copper');
-  const maskLayers     = sideLayers.filter(l => l.type === 'soldermask');
-  const fabLayers      = sideLayers.filter(l => ['fab', 'assembly', 'fiducial'].some(p => l.filename.toLowerCase().includes(p)));
+  const copperLayers = sideLayers.filter(l => l.type === 'copper');
+  const maskLayers = sideLayers.filter(l => l.type === 'soldermask');
+  const fabLayers = sideLayers.filter(l => ['fab', 'assembly', 'fiducial'].some(p => l.filename.toLowerCase().includes(p)));
 
   // ─── Strategy 1: Soldermask cross-correlation ────────────────────────────────
   // Find copper pads that have a corresponding soldermask opening (1.3x-4x larger)
@@ -304,13 +304,30 @@ export function analyzeFiducialsWithRails(layers, side = 'top') {
           maskDiameter: matchingMask.diameter,
           ratio: matchingMask.diameter / cu.diameter
         });
-        console.log(`  cross-match: cu=(${cu.x.toFixed(2)},${cu.y.toFixed(2)}) dia=${cu.diameter.toFixed(2)}, mask dia=${matchingMask.diameter.toFixed(2)}, ratio=${(matchingMask.diameter/cu.diameter).toFixed(1)}`);
+        console.log(`  cross-match: cu=(${cu.x.toFixed(2)},${cu.y.toFixed(2)}) dia=${cu.diameter.toFixed(2)}, mask dia=${matchingMask.diameter.toFixed(2)}, ratio=${(matchingMask.diameter / cu.diameter).toFixed(1)}`);
       }
     }
+    // Test points can also have an oversized mask opening. Fiducials normally
+    // use one repeated copper aperture and are isolated from nearby copper.
+    // Apply those constraints before accepting cross-correlated matches.
+    const copperNearestDist = (candidate) => copperFlashes
+      .filter(f => !(Math.abs(f.x - candidate.x) < 0.01 && Math.abs(f.y - candidate.y) < 0.01))
+      .reduce((minD, f) => Math.min(minD, Math.hypot(f.x - candidate.x, f.y - candidate.y)), Infinity);
 
-    if (fidCandidates.length >= 2) {
-      console.log(`[FidAnalyze] Cross-correlation found ${fidCandidates.length} fiducial matches!`);
-      return buildResult(fidCandidates, copperLayers[0]);
+    const isolatedCandidates = fidCandidates.filter(c => copperNearestDist(c) >= 2.0);
+    const diameterGroups = new Map();
+    for (const candidate of isolatedCandidates) {
+      const key = Math.round(candidate.diameter * 20) / 20;
+      if (!diameterGroups.has(key)) diameterGroups.set(key, []);
+      diameterGroups.get(key).push(candidate);
+    }
+    const repeatedGroup = [...diameterGroups.values()]
+      .filter(group => group.length >= 2)
+      .sort((a, b) => b.length - a.length)[0];
+
+    if (repeatedGroup) {
+      console.log(`[FidAnalyze] Cross-correlation found ${repeatedGroup.length} isolated repeated-aperture fiducials.`);
+      return buildResult(repeatedGroup, copperLayers[0]);
     } else {
       console.log('[FidAnalyze] Cross-correlation insufficient, falling back...');
     }
@@ -349,7 +366,7 @@ export function analyzeFiducialsWithRails(layers, side = 'top') {
   }
 
   const localFiducials = mergeFiducials(allLocal);
-  const railFiducials  = mergeFiducials(allRail).map((f, i) => ({ ...f, id: `R${i + 1}` }));
+  const railFiducials = mergeFiducials(allRail).map((f, i) => ({ ...f, id: `R${i + 1}` }));
   console.log(`[FidAnalyze] Final: ${localFiducials.length} local, ${railFiducials.length} rail`);
   return { localFiducials, railFiducials };
 }
@@ -362,7 +379,7 @@ export function analyzeFiducialsWithRails(layers, side = 'top') {
 function buildResult(candidates, copperLayer) {
   if (candidates.length < 2) {
     return {
-      localFiducials: candidates.map((f, i) => ({ id: `F${i+1}`, x: f.x, y: f.y, diameter: f.diameter, confidence: 0.95 })),
+      localFiducials: candidates.map((f, i) => ({ id: `F${i + 1}`, x: f.x, y: f.y, diameter: f.diameter, confidence: 0.95 })),
       railFiducials: []
     };
   }
@@ -373,8 +390,8 @@ function buildResult(candidates, copperLayer) {
 
   // If there are too many rail candidates (> 4), trim to the most spread-out pair/quad.
   // This handles cases where a rail strip contains more than the expected 2-4 marks.
-  const finalRail  = trimRailToCorners(rail);
-  const railSet    = new Set(finalRail.map(c => `${c.x.toFixed(3)},${c.y.toFixed(3)}`));
+  const finalRail = trimRailToCorners(rail);
+  const railSet = new Set(finalRail.map(c => `${c.x.toFixed(3)},${c.y.toFixed(3)}`));
   const finalLocal = candidates.filter(c => !railSet.has(`${c.x.toFixed(3)},${c.y.toFixed(3)}`));
 
   console.log(`[FidAnalyze] gap-separation: ${finalLocal.length} local, ${finalRail.length} rail`);
@@ -385,7 +402,7 @@ function buildResult(candidates, copperLayer) {
 
   return {
     localFiducials: toFid(finalLocal, 'F'),
-    railFiducials:  toFid(finalRail,  'R'),
+    railFiducials: toFid(finalRail, 'R'),
   };
 }
 
@@ -444,26 +461,26 @@ function gapBasedSeparation(candidates) {
   if (significantGaps.length >= 2) {
     // Two large gaps → top rail | local | bottom rail
     const [g1, g2] = significantGaps;
-    const topRail    = sorted.slice(0, g1);
+    const topRail = sorted.slice(0, g1);
     const middleLocal = sorted.slice(g1, g2);
     const bottomRail = sorted.slice(g2);
 
     // Only use as rail if the extreme group is smaller than the local group
     // (prevents classifying half the board as rail for irregular layouts)
     const MAX_RAIL_FRACTION = 0.35;
-    const useTop    = topRail.length / candidates.length <= MAX_RAIL_FRACTION;
+    const useTop = topRail.length / candidates.length <= MAX_RAIL_FRACTION;
     const useBottom = bottomRail.length / candidates.length <= MAX_RAIL_FRACTION;
 
-    rail  = [...(useTop ? topRail : []), ...(useBottom ? bottomRail : [])];
+    rail = [...(useTop ? topRail : []), ...(useBottom ? bottomRail : [])];
     local = [
-      ...(useTop    ? [] : topRail),
+      ...(useTop ? [] : topRail),
       ...middleLocal,
       ...(useBottom ? [] : bottomRail),
     ];
   } else if (significantGaps.length === 1) {
     const [g] = significantGaps;
     const before = sorted.slice(0, g);
-    const after  = sorted.slice(g);
+    const after = sorted.slice(g);
     // The smaller group is rail (rail strips are narrower than the board area)
     if (before.length <= after.length && before.length > 0 && before.length <= Math.ceil(candidates.length * 0.35)) {
       rail = before; local = after;

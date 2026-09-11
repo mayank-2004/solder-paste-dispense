@@ -629,8 +629,16 @@ export default function AutomatedDispensingPanel({
     setMachineStatus('busy');
     setIsJobRunning(true);
     isJobRunningRef.current = true;
-    if (onStartJob) onStartJob();
-
+    if (onStartJob) {
+      const canStart = onStartJob();
+      if (canStart === false) {
+        setJobStage('idle');
+        setMachineStatus('idle');
+        isJobRunningRef.current = false;
+        setIsJobRunning(false);
+        return;
+      }
+    }
     try {
       window.pauseSerialPolling = true;
       await sendGcodeWait('M400');

@@ -190,6 +190,8 @@
 .sidebar-workflow {
   padding: 10px 8px 6px;
   flex-shrink: 0;
+  max-height: 40vh; /* allows scrolling if too many steps */
+  overflow-y: auto;
 }
 .sidebar-section-label {
   font-size: 0.58rem;

@@ -31,6 +31,8 @@ import { toast, showConfirm } from "./lib/toast.js";
 import { AdminContext } from "./components/AdminContext.jsx";
 import GuidedTour from "./components/GuidedTour.jsx";
 import NetworkManagerPanel from "./components/NetworkManagerPanel.jsx";
+import FluxPanel from "./components/FluxPanel.jsx";
+import { FluxSystemManager } from "./lib/maintenance/fluxSystemManager.js";
 
 function calculatePadCenter(p) {
   if (typeof p.x === "number" && typeof p.y === "number") {
@@ -241,6 +243,7 @@ export default function App() {
   const [pasteVisualizer] = useState(() => new PasteVisualizer());
   const [dispensingSequencer] = useState(() => new DispensingSequencer());
   const [safePathPlanner] = useState(() => new SafePathPlanner());
+  const [fluxManager] = useState(() => new FluxSystemManager());
 
   const [showPasteDots, setShowPasteDots] = useState(false);
   const [dispensingSequence, setDispensingSequence] = useState([]);
@@ -351,6 +354,16 @@ export default function App() {
       setMaintenanceAlert(alert);
     });
   }, [maintenanceManager]);
+
+  useEffect(() => {
+    fluxManager.setReminderCallback((alert) => {
+      if (alert.type === 'low_flux') {
+        toast.warning(`Flux level is ${alert.status} (${alert.percent.toFixed(0)}%). Please refill.`);
+      } else if (alert.type === 'cleaning_due') {
+        toast.warning('Flux nozzle cleaning is due.');
+      }
+    });
+  }, [fluxManager]);
 
   const [nozzleDia, setNozzleDia] = useState(() => {
     try {
@@ -1733,6 +1746,7 @@ export default function App() {
     { id: 'CameraPanel', num: '5', label: 'Camera', sub: 'Vision Servo' },
     { id: 'BedCalibration', num: '6', label: 'Calibrate', sub: 'Bed Leveling' },
     { id: 'AutomatedDispensingPanel', num: '7', label: 'Dispense', sub: 'Run Job' },
+    { id: 'FluxPanel', num: '8', label: 'Flux', sub: 'Flux Spraying' },
     { id: 'NetworkManagerPanel', num: '📡', label: 'Network', sub: 'Wi-Fi / Bluetooth / Fleet' },
   ];
 
@@ -2284,6 +2298,10 @@ export default function App() {
                   isHomed={isHomed}
                   machinePosition={machinePos}
                   onStartJob={(gcode, mode) => {
+                    if (fluxManager.getStatus() === 'EMPTY') {
+                      toast.error("Cannot start job: Flux tank is empty!");
+                      return false;
+                    }
                     setIsJobRunning(true);
                     maintenanceManager.recordDispense();
                   }}
@@ -2301,6 +2319,25 @@ export default function App() {
                   layerData={layerData}
                 />
               </div>
+              <div style={{ display: activeComponent === 'FluxPanel' ? 'flex' : 'none', width: '100%', height: '100%', flexDirection: 'column' }}>
+                <FluxPanel 
+                  fluxManager={fluxManager}
+                  isConnected={isSerialConnected}
+                  isJobRunning={isJobRunning}
+                  onDispense={() => {
+                    if (window.serial) {
+                      window.serial.writeLine("M808 ; Dispense Flux");
+                    }
+                  }}
+                  onClean={() => {
+                    if (window.serial) {
+                      window.serial.writeLine("M809 ; Clean Flux Nozzle");
+                    }
+                  }}
+                  onRefill={() => {}}
+                />
+              </div>
+
               {/* ── Network Manager Panel ─────────────────────────────────── */}
               <div style={{ display: activeComponent === 'NetworkManagerPanel' ? 'flex' : 'none', width: '100%', height: '100%', flexDirection: 'column' }}>
                 <NetworkManagerPanel />

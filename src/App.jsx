@@ -10,14 +10,19 @@ import ComponentList from "./components/ComponentList.jsx";
 import JogPanel from "./components/JogPanel.jsx";
 import FiducialPanel from "./components/FiducialPanel.jsx";
 import AutomatedDispensingPanel from "./components/AutomatedDispensingPanel.jsx";
-import { analyzeFiducialsInLayers, analyzeFiducialsWithRails } from "./lib/gerber/fiducialDetection.js";
+import { analyzeFiducialsWithRails } from "./lib/gerber/fiducialDetection.js";
 import { detectPcbOrigins } from "./lib/gerber/originDetection.js";
 import { FiducialVisionDetector } from "./lib/vision/fiducialVision.js";
 import { fitSimilarity, fitAffine, fitTranslation, fitHomography, applyTransform, rmsError } from "./lib/utils/transform2d.js";
 import { CollisionDetector } from "./lib/collision/collisionDetection.js";
 import { PadDetector } from "./lib/vision/padDetection.js";
 import { QualityController } from "./lib/quality/qualityControl.js";
+import NetworkManagerPanel from "./components/NetworkManagerPanel.jsx";
+import FumeExtractionPanel from "./components/FumeExtractionPanel.jsx";
 import { NozzleMaintenanceManager } from "./lib/maintenance/nozzleMaintenance.js";
+import { useFluxManager } from "./hooks/useFluxManager.js";
+import { useFumeExtraction } from "./hooks/useFumeExtraction.js";
+import { firmwareCommands } from "./lib/machine/firmwareCommands.js";
 import { generatePath } from "./lib/motion/pathGeneration.js";
 import { PasteVisualizer } from "./lib/paste/pasteVisualization.js";
 import { DispensingSequencer } from "./lib/automation/dispensingSequence.js";
@@ -30,10 +35,7 @@ import { ToastContainer, ConfirmDialog } from "./components/ToastNotification.js
 import { toast, showConfirm } from "./lib/toast.js";
 import { AdminContext } from "./components/AdminContext.jsx";
 import GuidedTour from "./components/GuidedTour.jsx";
-import NetworkManagerPanel from "./components/NetworkManagerPanel.jsx";
 import FluxPanel from "./components/FluxPanel.jsx";
-import { FluxSystemManager } from "./lib/maintenance/fluxSystemManager.js";
-import { firmwareCommands } from "./lib/machine/firmwareCommands.js";
 
 function calculatePadCenter(p) {
   if (typeof p.x === "number" && typeof p.y === "number") {
@@ -244,7 +246,11 @@ export default function App() {
   const [pasteVisualizer] = useState(() => new PasteVisualizer());
   const [dispensingSequencer] = useState(() => new DispensingSequencer());
   const [safePathPlanner] = useState(() => new SafePathPlanner());
-  const [fluxManager] = useState(() => new FluxSystemManager());
+  const fluxManager = useFluxManager();
+  const fumeExtraction = useFumeExtraction();
+  const [fumeStatus, setFumeStatus] = useState('READY');
+  const [fumeAirflow, setFumeAirflow] = useState(0);
+  const [fumePumpLoad, setFumePumpLoad] = useState(0);
 
   const [showPasteDots, setShowPasteDots] = useState(false);
   const [dispensingSequence, setDispensingSequence] = useState([]);
@@ -356,15 +362,16 @@ export default function App() {
     });
   }, [maintenanceManager]);
 
+  // Reactively show flux warnings whenever levelState changes (replaces old setReminderCallback)
   useEffect(() => {
-    fluxManager.setReminderCallback((alert) => {
-      if (alert.type === 'low_flux') {
-        toast.warning(`Flux level is ${alert.status} (${alert.percent.toFixed(0)}%). Please refill.`);
-      } else if (alert.type === 'cleaning_due') {
-        toast.warning('Flux nozzle cleaning is due.');
-      }
-    });
-  }, [fluxManager]);
+    if (fluxManager.levelState === 'LOW') {
+      toast.warning(`Flux level is LOW (${fluxManager.levelPct.toFixed(0)}%). Please refill soon.`);
+    } else if (fluxManager.levelState === 'EMPTY') {
+      toast.error('Flux tank is EMPTY! Refill before starting a job.');
+    } else if (fluxManager.levelState === 'CLEAN_REQ') {
+      toast.warning('Flux nozzle cleaning is due.');
+    }
+  }, [fluxManager.levelState]);
 
   const [nozzleDia, setNozzleDia] = useState(() => {
     try {
@@ -1748,6 +1755,7 @@ export default function App() {
     { id: 'BedCalibration', num: '6', label: 'Calibrate', sub: 'Bed Leveling' },
     { id: 'AutomatedDispensingPanel', num: '7', label: 'Dispense', sub: 'Run Job' },
     { id: 'FluxPanel', num: '8', label: 'Flux', sub: 'Flux Spraying' },
+    { id: 'FumeExtractionPanel', num: '9', label: 'Fumes', sub: 'Extraction System' },
     { id: 'NetworkManagerPanel', num: '📡', label: 'Network', sub: 'Wi-Fi / Bluetooth / Fleet' },
   ];
 
@@ -2299,12 +2307,24 @@ export default function App() {
                   isHomed={isHomed}
                   machinePosition={machinePos}
                   onStartJob={(gcode, mode) => {
-                    if (fluxManager.getStatus() === 'EMPTY') {
+                    if (fluxManager.levelState === 'EMPTY') {
                       toast.error("Cannot start job: Flux tank is empty!");
+                      return false;
+                    }
+                    if (fumeStatus === 'FAULT' || fumeExtraction.isFilterServiceRequired) {
+                      toast.error("Cannot start job: Fume extraction system fault or filter requires service for safe operation!");
                       return false;
                     }
                     setIsJobRunning(true);
                     maintenanceManager.recordDispense();
+                    fluxManager.recordDispense();
+                    
+                    // Auto-start extraction
+                    if (window.serial && fumeStatus !== 'RUNNING') {
+                      window.serial.writeLine('M3');
+                      setFumeStatus('RUNNING');
+                      fumeExtraction.logEvent('Job started: Auto-started fume extraction.');
+                    }
                   }}
                   onDownloadGCode={(gcode) => {
                     const blob = new Blob([gcode.join('\n')], { type: 'text/plain' });
@@ -2316,6 +2336,18 @@ export default function App() {
                   }}
                   onJobComplete={() => {
                     setIsJobRunning(false);
+                    // Post-run extraction
+                    if (window.serial && fumeStatus === 'RUNNING') {
+                      setFumeStatus('POST-RUN');
+                      fumeExtraction.logEvent(`Job ended: Entering post-run for ${fumeExtraction.postRunDurationSec}s.`);
+                      fumeExtraction.addOperatingTime(0.5);
+
+                      setTimeout(() => {
+                        if (window.serial) window.serial.writeLine('M5');
+                        setFumeStatus('READY');
+                        fumeExtraction.logEvent('Post-run complete: Auto-stopped fume extraction.');
+                      }, fumeExtraction.postRunDurationSec * 1000);
+                    }
                   }}
                   layerData={layerData}
                 />
@@ -2328,17 +2360,42 @@ export default function App() {
                   onDispense={() => {
                     if (window.serial) {
                       window.serial.writeLine(firmwareCommands.flux.dispense);
-                      setTimeout(() => window.serial.writeLine(firmwareCommands.flux.dispenseOff), 500); // 500ms pulse
+                      setTimeout(() => window.serial.writeLine(firmwareCommands.flux.dispenseOff), 500);
                     }
                   }}
                   onClean={() => {
                     if (window.serial) {
                       window.serial.writeLine(firmwareCommands.flux.cleanStart);
                       setTimeout(() => window.serial.writeLine(firmwareCommands.flux.flushFwd), 100);
-                      setTimeout(() => window.serial.writeLine(firmwareCommands.flux.cleanEnd), 3000); // 3 sec clean
+                      setTimeout(() => window.serial.writeLine(firmwareCommands.flux.cleanEnd), 3000);
+                    }
+                    fluxManager.markCleaned();
+                  }}
+                  onRefill={() => fluxManager.markRefilled()}
+                />
+              </div>
+              <div style={{ display: activeComponent === 'FumeExtractionPanel' ? 'flex' : 'none', width: '100%', height: '100%', flexDirection: 'column' }}>
+                <FumeExtractionPanel 
+                  fumeManager={fumeExtraction}
+                  isConnected={isSerialConnected}
+                  isJobRunning={isJobRunning}
+                  systemStatus={fumeStatus}
+                  liveAirflow={fumeAirflow}
+                  pumpLoad={fumePumpLoad}
+                  onManualStart={() => {
+                    if (window.serial) {
+                      setFumeStatus('RUNNING');
+                      window.serial.writeLine('M3');
+                      fumeExtraction.logEvent('Fume extraction manually started.');
                     }
                   }}
-                  onRefill={() => {}}
+                  onStop={() => {
+                    if (window.serial) {
+                      setFumeStatus('READY');
+                      window.serial.writeLine('M5');
+                      fumeExtraction.logEvent('Fume extraction manually stopped.');
+                    }
+                  }}
                 />
               </div>
 

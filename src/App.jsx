@@ -33,9 +33,10 @@ import { useGerberFiles } from "./hooks/useGerberFiles.js";
 import AppHeader from "./components/AppHeader.jsx";
 import { ToastContainer, ConfirmDialog } from "./components/ToastNotification.jsx";
 import { toast, showConfirm } from "./lib/toast.js";
-import { AdminContext } from "./components/AdminContext.jsx";
 import GuidedTour from "./components/GuidedTour.jsx";
 import FluxPanel from "./components/FluxPanel.jsx";
+import TipCleanerPanel from "./components/TipCleanerPanel.jsx";
+import { useTipCleaner } from "./hooks/useTipCleaner.js";
 
 function calculatePadCenter(p) {
   if (typeof p.x === "number" && typeof p.y === "number") {
@@ -251,6 +252,8 @@ export default function App() {
   const [fumeStatus, setFumeStatus] = useState('READY');
   const [fumeAirflow, setFumeAirflow] = useState(0);
   const [fumePumpLoad, setFumePumpLoad] = useState(0);
+  const tipCleaner = useTipCleaner();
+  const [tipCleanerStatus, setTipCleanerStatus] = useState('IDLE');
 
   const [showPasteDots, setShowPasteDots] = useState(false);
   const [dispensingSequence, setDispensingSequence] = useState([]);
@@ -388,8 +391,6 @@ export default function App() {
       return { viscosity: "medium", customPressure: 25, customDwellTime: 120 };
     }
   });
-  // Operator mode disabled by user request - hardcoded to admin access
-  const [isAdmin, setIsAdmin] = useState(true);
 
   const [speedSettings, setSpeedSettings] = useState(() => {
     try {
@@ -1756,6 +1757,7 @@ export default function App() {
     { id: 'AutomatedDispensingPanel', num: '7', label: 'Dispense', sub: 'Run Job' },
     { id: 'FluxPanel', num: '8', label: 'Flux', sub: 'Flux Spraying' },
     { id: 'FumeExtractionPanel', num: '9', label: 'Fumes', sub: 'Extraction System' },
+    { id: 'TipCleanerPanel', num: '10', label: 'Tip Cleaner', sub: 'Auto Tip Cleaning' },
     { id: 'NetworkManagerPanel', num: '📡', label: 'Network', sub: 'Wi-Fi / Bluetooth / Fleet' },
   ];
 
@@ -1770,7 +1772,6 @@ export default function App() {
   const mPos = livePreview.machinePosition || machinePos || { x: 0, y: 0, z: 0 };
 
   return (
-    <AdminContext.Provider value={isAdmin}>
       <div id="root" onDragOver={(e) => e.preventDefault()} onDrop={onDrop}>
         <GuidedTour
           isConnected={isSerialConnected}
@@ -1788,9 +1789,6 @@ export default function App() {
           isEmergencyStopped={isEmergencyStopped}
           onStop={triggerEmergencyStop}
           onReset={resetEmergencyStop}
-          isAdmin={isAdmin}
-          onUnlock={() => setIsAdmin(true)}
-          onLock={() => setIsAdmin(false)}
         />
 
         <ToastContainer />
@@ -2306,6 +2304,9 @@ export default function App() {
                   isConnected={isSerialConnected}
                   isHomed={isHomed}
                   machinePosition={machinePos}
+                  onPadDispensed={() => {
+                      tipCleaner.recordPadDispensed();
+                  }}
                   onStartJob={(gcode, mode) => {
                     if (fluxManager.levelState === 'EMPTY') {
                       toast.error("Cannot start job: Flux tank is empty!");
@@ -2313,6 +2314,11 @@ export default function App() {
                     }
                     if (fumeStatus === 'FAULT' || fumeExtraction.isFilterServiceRequired) {
                       toast.error("Cannot start job: Fume extraction system fault or filter requires service for safe operation!");
+                      return false;
+                    }
+                    if (tipCleanerStatus === 'FAULT' || tipCleaner.needsCleaning) {
+                      toast.error("Cannot start job: Tip cleaning mechanism fault or cleaning is required!");
+                      tipCleaner.logEvent('Job blocked: Mandatory tip cleaning required.', 'error');
                       return false;
                     }
                     setIsJobRunning(true);
@@ -2386,15 +2392,39 @@ export default function App() {
                     if (window.serial) {
                       setFumeStatus('RUNNING');
                       window.serial.writeLine('M3');
-                      fumeExtraction.logEvent('Fume extraction manually started.');
+                      fumeExtraction.logEvent('Operator started fume extraction manually.');
                     }
                   }}
-                  onStop={() => {
+                  onManualStop={() => {
                     if (window.serial) {
                       setFumeStatus('READY');
                       window.serial.writeLine('M5');
-                      fumeExtraction.logEvent('Fume extraction manually stopped.');
+                      fumeExtraction.logEvent('Operator stopped fume extraction manually.');
                     }
+                  }}
+                  onResetFault={() => {
+                      setFumeStatus('READY');
+                      fumeExtraction.logEvent('Operator reset system fault.');
+                  }}
+                />
+              </div>
+              <div style={{ display: activeComponent === 'TipCleanerPanel' ? 'flex' : 'none', width: '100%', height: '100%', flexDirection: 'column' }}>
+                <TipCleanerPanel 
+                  tipCleaner={tipCleaner}
+                  isConnected={isSerialConnected}
+                  isJobRunning={isJobRunning}
+                  systemStatus={tipCleanerStatus}
+                  onManualStart={() => {
+                      if(window.serial) {
+                          setTipCleanerStatus('CLEANING');
+                          window.serial.writeLine(firmwareCommands.tipCleaner.runCycle);
+                          tipCleaner.logEvent('Operator started tip cleaning cycle.');
+                          setTimeout(() => {
+                              window.serial.writeLine(firmwareCommands.tipCleaner.stopCycle);
+                              setTipCleanerStatus('IDLE');
+                              tipCleaner.recordCleanSuccess();
+                          }, 3000); // Simulate 3 second cleaning cycle
+                      }
                   }}
                 />
               </div>
@@ -2407,6 +2437,5 @@ export default function App() {
           </div>
         </div>
       </div>
-    </AdminContext.Provider>
   );
 }

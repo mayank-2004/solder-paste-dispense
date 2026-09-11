@@ -27,6 +27,13 @@ export const firmwareCommands = {
         dispense:     'M3 S255',  // Dispense forward
         dispenseOff:  'M5',       // Stop
     },
+
+    // Tools (Automatic Tip Cleaner)
+    // Assuming custom M-codes or specific spindle/coolant pins are used.
+    tipCleaner: {
+        runCycle: 'M8', // Placeholder: M8 typically coolant on, adjust as needed for air jet/servo trigger
+        stopCycle: 'M9'
+    },
     
     // Settings & Configuration
     setAccel: (accel) => "", // GRBL doesn't support dynamic M204 T...

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import './FluxPanel.css';
 import { toast, showConfirm } from '../lib/toast.js';
 
@@ -10,17 +10,25 @@ export default function FluxPanel({
   onClean,
   onRefill
 }) {
-  const [_, forceRender] = useState({});
 
-  useEffect(() => {
-    // Re-render when fluxManager state changes. This is a bit hacky, but works.
-    const interval = setInterval(() => forceRender({}), 1000);
-    return () => clearInterval(interval);
-  }, []);
+  // Destructure flat state and actions from the hook
+  const {
+    currentWeight,
+    totalDispenses,
+    cyclesSinceLastClean,
+    lastDispensedTime,
+    lastCleanedTime,
+    settings,
+    levelPct,
+    levelState,
+    recordDispense,
+    markCleaned,
+    markRefilled,
+    updateSettings,
+  } = fluxManager || {};
 
   const handleUpdateSettings = (key, val) => {
-    fluxManager.updateSettings({ [key]: val });
-    forceRender({});
+    updateSettings?.({ [key]: val });
   };
 
   const handleDispense = async () => {
@@ -28,16 +36,14 @@ export default function FluxPanel({
       toast.warning("Machine not connected.");
       return;
     }
-    const status = fluxManager.getStatus();
-    if (status === 'EMPTY') {
+    if (levelState === 'EMPTY') {
       toast.error("Flux tank is empty! Please refill before dispensing.");
       return;
     }
     const confirmed = await showConfirm("Dispense flux manually?");
     if (confirmed) {
       onDispense();
-      fluxManager.recordDispense();
-      forceRender({});
+      recordDispense?.();
     }
   };
 
@@ -49,9 +55,7 @@ export default function FluxPanel({
     const confirmed = await showConfirm("Run cleaning cycle?");
     if (confirmed) {
       onClean();
-      fluxManager.markCleaned();
-      forceRender({});
-      toast.success("Cleaning cycle completed.");
+      toast.success("Cleaning cycle started.");
     }
   };
 
@@ -59,21 +63,15 @@ export default function FluxPanel({
     const confirmed = await showConfirm("Mark flux tank as refilled?");
     if (confirmed) {
       onRefill();
-      fluxManager.markRefilled();
-      forceRender({});
       toast.success("Flux tank refilled.");
     }
   };
 
-  const status = fluxManager.getStatus();
-  const percent = fluxManager.getLevelPercent();
-  const currentWeight = fluxManager.currentWeight.toFixed(1);
-
   let statusText = 'NORMAL';
   let statusClass = 'normal';
-  if (status === 'EMPTY') { statusText = 'EMPTY'; statusClass = 'error'; }
-  else if (status === 'LOW') { statusText = 'LOW'; statusClass = 'warning'; }
-  else if (status === 'CLEAN_REQ') { statusText = 'CLEAN REQ'; statusClass = 'warning'; }
+  if (levelState === 'EMPTY') { statusText = 'EMPTY'; statusClass = 'error'; }
+  else if (levelState === 'LOW') { statusText = 'LOW'; statusClass = 'warning'; }
+  else if (levelState === 'CLEAN_REQ') { statusText = 'CLEAN REQ'; statusClass = 'warning'; }
 
   const formatTime = (ts) => {
     if (!ts) return 'Never';
@@ -88,11 +86,11 @@ export default function FluxPanel({
           <div className="level-info">
             <div className="level-text">FLUX TANK LEVEL</div>
             <div className={`status-badge ${statusClass}`}>{statusText}</div>
-            <div className="weight-text">{currentWeight} g</div>
+            <div className="weight-text">{(currentWeight ?? 0).toFixed(1)} g</div>
           </div>
           <div className="progress-container">
-            <div className="progress-bar" style={{ width: `${percent}%`, backgroundColor: status === 'EMPTY' ? '#f44336' : status === 'LOW' ? '#ff9800' : '#4caf50' }}></div>
-            <div className="progress-text">{percent.toFixed(0)}% remaining</div>
+            <div className="progress-bar" style={{ width: `${levelPct ?? 0}%`, backgroundColor: levelState === 'EMPTY' ? '#f44336' : levelState === 'LOW' ? '#ff9800' : '#4caf50' }}></div>
+            <div className="progress-text">{(levelPct ?? 0).toFixed(0)}% remaining</div>
           </div>
           <div className="activity-info">
             <div className="activity-text">ACTIVITY</div>
@@ -124,9 +122,9 @@ export default function FluxPanel({
           </button>
         </div>
         <div className="stats-text">
-          Last cleaned: {formatTime(fluxManager.lastCleanedTime)}<br/>
-          Last dispensed: {formatTime(fluxManager.lastDispensedTime)}<br/>
-          Total dispenses: {fluxManager.totalDispenses} | Cycles since last clean: {fluxManager.cyclesSinceLastClean}/{fluxManager.settings.cleanInterval}
+          Last cleaned: {formatTime(lastCleanedTime)}<br/>
+          Last dispensed: {formatTime(lastDispensedTime)}<br/>
+          Total dispenses: {totalDispenses} | Cycles since last clean: {cyclesSinceLastClean}/{settings?.cleanInterval ?? 0}
         </div>
       </div>
 
@@ -137,7 +135,7 @@ export default function FluxPanel({
             <label>EMPTY (TARE) WEIGHT (G)</label>
             <input 
               type="number" 
-              value={fluxManager.settings.emptyWeight} 
+              value={settings?.emptyWeight ?? ''} 
               onChange={e => handleUpdateSettings('emptyWeight', Number(e.target.value))} 
             />
           </div>
@@ -145,7 +143,7 @@ export default function FluxPanel({
             <label>FULL WEIGHT (G)</label>
             <input 
               type="number" 
-              value={fluxManager.settings.fullWeight} 
+              value={settings?.fullWeight ?? ''} 
               onChange={e => handleUpdateSettings('fullWeight', Number(e.target.value))} 
             />
           </div>
@@ -153,7 +151,7 @@ export default function FluxPanel({
             <label>LOW LEVEL THRESHOLD (%)</label>
             <input 
               type="number" 
-              value={fluxManager.settings.lowThresholdPercent} 
+              value={settings?.lowThresholdPercent ?? ''} 
               onChange={e => handleUpdateSettings('lowThresholdPercent', Number(e.target.value))} 
             />
           </div>
@@ -161,7 +159,7 @@ export default function FluxPanel({
             <label>CLEAN CYCLE INTERVAL (DISPENSES)</label>
             <input 
               type="number" 
-              value={fluxManager.settings.cleanInterval} 
+              value={settings?.cleanInterval ?? ''} 
               onChange={e => handleUpdateSettings('cleanInterval', Number(e.target.value))} 
             />
           </div>

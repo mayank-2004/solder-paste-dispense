@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { toast, showConfirm } from '../lib/toast.js';
-import { header, home, moveAbs, dispensePoint, dispenseBead, jogRel } from "../lib/motion/gcode.js";
+import { dispensePoint, dispenseBead, jogRel } from "../lib/motion/gcode.js";
 import { applyTransform, fitSimilarity, fitAffine } from "../lib/utils/transform2d.js";
 import "./AutomatedDispensingPanel.css";
 import { buildJobPasteSummary, PasteStore } from '../lib/paste/pasteTracker.js';
@@ -9,7 +9,6 @@ import { getZOffsetForPoint } from './BedCalibrationPanel.jsx';
 import PasteGauge from './PasteGauge.jsx';
 import MaintenanceManager from './MaintenanceManager.jsx';
 import { NozzleMaintenanceManager, computeNozzleHealth } from '../lib/maintenance/nozzleMaintenance.js';
-import { useAdmin } from './AdminContext.jsx';
 import { firmwareCommands } from '../lib/machine/firmwareCommands.js';
 
 const nozzleMaintenance = new NozzleMaintenanceManager();
@@ -84,7 +83,6 @@ export default function AutomatedDispensingPanel({
   dispensingSequencer,
   dispensingSequence,
   safeSequence,
-  jobStatistics,
   referencePoint,
   selectedOrigin,
   pressureSettings,
@@ -93,30 +91,20 @@ export default function AutomatedDispensingPanel({
   boardOutline,
   useSafePathPlanning = false,
   setUseSafePathPlanning,
-  safePathPlanner,
   onStartJob,
-  onDownloadGCode,
-  batchProcessor,
-  currentBatch,
-  onStartBatch,
   onJobComplete,
   fiducials = [],
-  onInputMachine,
-  onAutoAlign,
-  onSolve2,
-  onSolve3,
   xf,
   applyXf,
   isConnected = false,
   isHomed = false,
   machinePosition = { x: 0, y: 0, z: 0 },
   panelBoards = [],
-  panelInfo = null,
   panelXf = null,
-  toolOffset = { dx: 0, dy: 0 }
+  toolOffset = { dx: 0, dy: 0 },
+  onPadDispensed
 }) {
   const [isJobRunning, setIsJobRunning] = useState(false);
-  const isAdmin = useAdmin();
 
   const isJobRunningRef = useRef(false);
   const [resumeFromPad, setResumeFromPad] = useState(0);
@@ -927,6 +915,7 @@ export default function AutomatedDispensingPanel({
           }
 
           nozzleMaintenance.recordDispense();
+          if (onPadDispensed) onPadDispensed();
 
           // ── Post-dispense dot verification ─────────────────────────────
           if (enableDotVerification && tp) {
@@ -1246,16 +1235,6 @@ export default function AutomatedDispensingPanel({
             </label>
             <hr style={{ borderColor: '#444', margin: '12px 0' }} />
             <h5>G-Code Generation Config</h5>
-            {!isAdmin && (
-              <div style={{
-                display: 'flex', alignItems: 'center', gap: 8,
-                background: 'rgba(245,166,35,0.08)', border: '1px solid rgba(245,166,35,0.3)',
-                borderRadius: 6, padding: '7px 12px', marginBottom: 8, fontSize: '0.8rem', color: '#e3b341',
-              }}>
-                🔒 Settings locked — switch to Admin mode to edit
-              </div>
-            )}
-            <fieldset disabled={!isAdmin} style={{ border: 'none', padding: 0, margin: 0 }}>
             <div className="grid2" style={{ gap: '8px', fontSize: '0.9em' }}>
               <label style={{ gridColumn: '1 / -1' }}>
                 Paste Viscosity (Presets):
@@ -1394,7 +1373,6 @@ export default function AutomatedDispensingPanel({
                 <span>Reverse Board Dispensing Order</span>
               </label>
             </div>
-            </fieldset>
 
             {/* ── Recipe Manager ──────────────────────────────────────────── */}
             <details open style={{ marginTop: 14 }}>
@@ -1420,7 +1398,7 @@ export default function AutomatedDispensingPanel({
                   <button
                     className="btn"
                     style={{ fontSize: '0.82em', padding: '4px 12px', whiteSpace: 'nowrap' }}
-                    disabled={!recipeName.trim() || !isAdmin}
+                    disabled={!recipeName.trim()}
                     onClick={handleSaveRecipe}
                     title="Save current settings as a recipe"
                   >💾 Save</button>
@@ -1445,10 +1423,9 @@ export default function AutomatedDispensingPanel({
                           onClick={() => handleLoadRecipe(name)}
                         >Load</button>
                         <button
-                          style={{ fontSize: '0.75em', padding: '2px 6px', background: 'transparent', color: '#f85149', border: '1px solid #f8514966', borderRadius: 3, cursor: 'pointer', flexShrink: 0, opacity: isAdmin ? 1 : 0.3 }}
+                          style={{ fontSize: '0.75em', padding: '2px 6px', background: 'transparent', color: '#f85149', border: '1px solid #f8514966', borderRadius: 3, cursor: 'pointer', flexShrink: 0 }}
                           onClick={() => handleDeleteRecipe(name)}
-                          disabled={!isAdmin}
-                          title={isAdmin ? `Delete "${name}"` : 'Admin mode required'}
+                          title={`Delete "${name}"`}
                         >✕</button>
                       </div>
                     ))}

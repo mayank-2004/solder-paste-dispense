@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-import { useAdmin } from './AdminContext.jsx';
 import { toast } from '../lib/toast.js';
 import './FumeExtractionPanel.css';
 
@@ -13,7 +12,6 @@ export default function FumeExtractionPanel({
   onManualStart,
   onStop
 }) {
-  const { isAdmin } = useAdmin();
   const [unlocked, setUnlocked] = useState(false);
 
   // All state comes directly from the hook — no local mirror needed
@@ -131,13 +129,7 @@ export default function FumeExtractionPanel({
             <input 
               type="checkbox" 
               checked={unlocked} 
-              onChange={e => {
-                if (!isAdmin && e.target.checked) {
-                  toast.error("Admin access required to unlock settings.");
-                  return;
-                }
-                setUnlocked(e.target.checked);
-              }} 
+              onChange={e => setUnlocked(e.target.checked)} 
             />
             <span className="toggle-slider"></span>
           </label>

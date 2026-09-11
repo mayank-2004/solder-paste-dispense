@@ -1,7 +1,6 @@
 import { useState } from 'react';
-import { PinUnlockModal, ChangePinModal } from './AdminAuth.jsx';
 
-export default function AppHeader({ mPos, isSerialConnected, isEmergencyStopped, onStop, onReset, isAdmin, onUnlock, onLock }) {
+export default function AppHeader({ mPos, isSerialConnected, isEmergencyStopped, onStop, onReset }) {
   const [showUnlock, setShowUnlock] = useState(false);
   const [showChangePin, setShowChangePin] = useState(false);
 
@@ -75,15 +74,6 @@ export default function AppHeader({ mPos, isSerialConnected, isEmergencyStopped,
         </button>
       </div>
 
-      {showUnlock && (
-        <PinUnlockModal
-          onSuccess={() => { onUnlock(); setShowUnlock(false); }}
-          onClose={() => setShowUnlock(false)}
-        />
-      )}
-      {showChangePin && (
-        <ChangePinModal onClose={() => setShowChangePin(false)} />
-      )}
     </header>
   );
 }

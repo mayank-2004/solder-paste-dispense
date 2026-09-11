@@ -1,9 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 
+import { firmwareCommands } from "../lib/machine/firmwareCommands.js";
+
 export function useSerialMachine() {
   const [isSerialConnected, setIsSerialConnected] = useState(false);
   const [machinePos, setMachinePos] = useState({ x: 0, y: 0, z: 0 });
   const [isEmergencyStopped, setIsEmergencyStopped] = useState(false);
+  
   const handleSerialConnect = (status) => {
     setIsSerialConnected(status);
   };
@@ -17,10 +20,8 @@ export function useSerialMachine() {
     console.error('[E-STOP] Emergency Stop Triggered!');
     try {
       if (window.serial?.writeLine) {
-        if (window.serial.write) await window.serial.write('\x18');
-        await window.serial.writeLine('M112');
-        await window.serial.writeLine('!');
-        await window.serial.writeLine('M0');
+        if (window.serial.write) await window.serial.write(firmwareCommands.reset);
+        await window.serial.writeLine(firmwareCommands.pause);
         await window.serial.writeLine('G91');
         await window.serial.writeLine('G0 Z10 F300');
         await window.serial.writeLine('G90');
@@ -32,8 +33,7 @@ export function useSerialMachine() {
     setIsEmergencyStopped(false);
     try {
       if (window.serial?.writeLine) {
-        await window.serial.writeLine('$X');
-        await window.serial.writeLine('M999');
+        await window.serial.writeLine(firmwareCommands.unlock);
       }
     } catch (err) { console.error('[E-STOP] Failed to send reset commands:', err); }
   };

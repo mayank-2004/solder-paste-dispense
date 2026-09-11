@@ -1,3 +1,5 @@
+import { defaultFeeds } from "../motion/gcode.js";
+import { firmwareCommands } from '../machine/firmwareCommands.js';
 import { applyTransform } from '../utils/transform2d.js';
 
 export class SafePathPlanner {
@@ -110,7 +112,7 @@ export class SafePathPlanner {
     gcode.push('');
     gcode.push('G21 ; Set units to millimeters');
     gcode.push('G90 ; Absolute positioning');
-    gcode.push('G28 ; Home all axes');
+    gcode.push(`${firmwareCommands.home} ; Home all axes`);
     gcode.push(`G1 Z${this.safeHeight} F600 ; Move to safe height`);
     gcode.push('');
 
@@ -137,7 +139,7 @@ export class SafePathPlanner {
     });
 
     gcode.push(`G1 Z${this.safeHeight} F600 ; Lift before home`);
-    gcode.push('G28 ; Return home');
+    gcode.push(`${firmwareCommands.home} ; Return home`);
     gcode.push('M84 ; Disable steppers');
 
     return gcode.join('\n');

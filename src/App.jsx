@@ -33,6 +33,7 @@ import GuidedTour from "./components/GuidedTour.jsx";
 import NetworkManagerPanel from "./components/NetworkManagerPanel.jsx";
 import FluxPanel from "./components/FluxPanel.jsx";
 import { FluxSystemManager } from "./lib/maintenance/fluxSystemManager.js";
+import { firmwareCommands } from "./lib/machine/firmwareCommands.js";
 
 function calculatePadCenter(p) {
   if (typeof p.x === "number" && typeof p.y === "number") {
@@ -1963,7 +1964,7 @@ export default function App() {
                           const lmp = livePreview.machinePosition;
                           if (!lmp) { toast.warning("Machine position unknown."); return; }
                           const shiftX = -lmp.x, shiftY = -lmp.y;
-                          await window.serial.writeLine("G92 X0 Y0");
+                          await window.serial.writeLine(firmwareCommands.setZero);
                           setPcbOriginOffset({ x: 0, y: 0 });
                           setFiducials(prev => prev.map(f => f.machine ? { ...f, machine: { x: f.machine.x + shiftX, y: f.machine.y + shiftY } } : f));
                           setXf(null); setApplyXf(false);
@@ -2326,12 +2327,15 @@ export default function App() {
                   isJobRunning={isJobRunning}
                   onDispense={() => {
                     if (window.serial) {
-                      window.serial.writeLine("M808 ; Dispense Flux");
+                      window.serial.writeLine(firmwareCommands.flux.dispense);
+                      setTimeout(() => window.serial.writeLine(firmwareCommands.flux.dispenseOff), 500); // 500ms pulse
                     }
                   }}
                   onClean={() => {
                     if (window.serial) {
-                      window.serial.writeLine("M809 ; Clean Flux Nozzle");
+                      window.serial.writeLine(firmwareCommands.flux.cleanStart);
+                      setTimeout(() => window.serial.writeLine(firmwareCommands.flux.flushFwd), 100);
+                      setTimeout(() => window.serial.writeLine(firmwareCommands.flux.cleanEnd), 3000); // 3 sec clean
                     }
                   }}
                   onRefill={() => {}}

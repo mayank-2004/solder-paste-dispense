@@ -1,3 +1,5 @@
+import { firmwareCommands } from '../machine/firmwareCommands.js';
+
 export const defaultAxisMap = {
   X: "X",
   Y: "Y",
@@ -31,12 +33,14 @@ export function setWorkZero({ x, y, z, r }, axisMap = defaultAxisMap) {
 }
 
 export function home({ x = true, y = true, z = true, r = false } = {}, axisMap = defaultAxisMap) {
-  const parts = [];
-  if (x) parts.push(axisMap.X);
-  if (y) parts.push(axisMap.Y);
-  if (z) parts.push(axisMap.Z);
-  if (r) parts.push(axisMap.R);
-  return [`G28 ${parts.join(" ")}`.trim()];
+  // If homing everything, use global home
+  if (x && y && z) return [firmwareCommands.home];
+  
+  const cmds = [];
+  if (x) cmds.push(firmwareCommands.homeX);
+  if (y) cmds.push(firmwareCommands.homeY);
+  if (z) cmds.push(firmwareCommands.homeZ);
+  return cmds.filter(c => c);
 }
 
 export function moveAbs({ x, y, z, r, feed }, axisMap = defaultAxisMap) {

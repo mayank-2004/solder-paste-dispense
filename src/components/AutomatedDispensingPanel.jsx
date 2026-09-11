@@ -10,6 +10,7 @@ import PasteGauge from './PasteGauge.jsx';
 import MaintenanceManager from './MaintenanceManager.jsx';
 import { NozzleMaintenanceManager, computeNozzleHealth } from '../lib/maintenance/nozzleMaintenance.js';
 import { useAdmin } from './AdminContext.jsx';
+import { firmwareCommands } from '../lib/machine/firmwareCommands.js';
 
 const nozzleMaintenance = new NozzleMaintenanceManager();
 
@@ -152,8 +153,8 @@ export default function AutomatedDispensingPanel({
     : { x: 0, y: 0 };
 
   // Machine Configuration State
-  const [valveOnCmd, setValveOnCmd] = useState('M42 P4 S255');
-  const [valveOffCmd, setValveOffCmd] = useState('M42 P4 S0');
+  const [valveOnCmd, setValveOnCmd] = useState(firmwareCommands.dispenserOn);
+  const [valveOffCmd, setValveOffCmd] = useState(firmwareCommands.dispenserOff);
   const [dispenseHeight, setDispenseHeight] = useState(0.5);
   const [safeTravelHeight, setSafeTravelHeight] = useState(5.0);
   const [viscosity, setViscosity] = useState('medium'); // low, medium, high
@@ -767,11 +768,11 @@ export default function AutomatedDispensingPanel({
             // M204 T sets the travel (non-printing) acceleration limit.
             // Capping it at 500 mm/s² here prevents the stepper from jerking
             // when jumping to a new fiducial position from a standstill.
-            await sendGcodeWait('M204 T500');
+            await sendGcodeWait(firmwareCommands.setAccel(500) || '; M204 T500');
             const fidTravelSpeed = speedSettings?.travelSpeed || 2000;
             await sendGcodeWait(`G1 X${expectedMachine.x.toFixed(3)} Y${expectedMachine.y.toFixed(3)} F${fidTravelSpeed}`);
             // Restore higher travel accel for dispensing moves
-            await sendGcodeWait('M204 T1000');
+            await sendGcodeWait(firmwareCommands.setAccel(1000) || '; M204 T1000');
             await sendGcodeWait('M400');
             await new Promise(r => setTimeout(r, 800));
 

@@ -1,4 +1,5 @@
-import { applyTransform } from '../utils/transform2d.js';
+import { fitSimilarity, fitAffine, applyTransform } from '../utils/transform2d.js';
+import { firmwareCommands } from '../machine/firmwareCommands.js';
 
 export class DispensingSequencer {
   constructor() {
@@ -191,7 +192,7 @@ export class DispensingSequencer {
     gcode.push('');
     gcode.push('G21 ; Set units to millimeters');
     gcode.push('G90 ; Absolute positioning');
-    gcode.push('G28 ; Home all axes');
+    gcode.push(`${firmwareCommands.home} ; Home all axes`);
     gcode.push(`G1 Z${safeHeight} F${travelSpeed} ; Lift to safe travel height`);
     gcode.push('');
 

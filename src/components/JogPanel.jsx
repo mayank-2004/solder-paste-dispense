@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import "./JogPanel.css";
 import { jogRel } from "../lib/motion/gcode.js";
 import { toast, showConfirm } from "../lib/toast.js";
+import { firmwareCommands } from "../lib/machine/firmwareCommands.js";
 
 export default function JogPanel({
     machinePosition,
@@ -66,13 +67,15 @@ export default function JogPanel({
     const handleHomeClick = async () => {
         if (!isConnected) return toast.warning("Please connect to machine first!");
         if (isBusy) return;
-        if (!await showConfirm("Home all axes (G28)? Ensure area is clear.")) return;
+        if (!await showConfirm("Home all axes? Ensure area is clear.")) return;
 
         setIsBusy(true);
         window.pauseSerialPolling = true;
         try {
-            if (window.serial?.writeLine) {
-                await window.serial.writeLine("G28");
+            if (window.serial && window.serial.writeLine) {
+                // Ensure absolute positioning
+                await window.serial.writeLine("G90");
+                await window.serial.writeLine(firmwareCommands.home);
             }
         } catch (e) {
             console.error("Home failed:", e);
@@ -101,7 +104,7 @@ export default function JogPanel({
                         <button className="btn jog-btn x-minus" onClick={() => jog("X", -1)} disabled={isBusy}>X-</button>
                     </div>
                     <div className="jog-cell">
-                        <button className="btn jog-btn home-btn" onClick={handleHomeClick} disabled={isBusy} title="Home All Axes (G28)">
+                        <button className="btn jog-btn home-btn" onClick={handleHomeClick} disabled={isBusy} title="Home All Axes">
                             🏠
                         </button>
                     </div>

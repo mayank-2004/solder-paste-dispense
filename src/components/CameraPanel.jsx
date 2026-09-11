@@ -4,6 +4,8 @@ import { fitAffine, fitSimilarity, fitTranslation, applyTransform } from "../lib
 import LensCalibration from "./LensCalibration.jsx";
 import { FiducialVisionDetector } from "../lib/vision/fiducialVision.js";
 import { PadDetector } from "../lib/vision/padDetection.js";
+import { QualityController } from '../lib/quality/qualityControl.js';
+import { firmwareCommands } from '../lib/machine/firmwareCommands.js';
 import { jogRel, moveAbs } from "../lib/motion/gcode";
 import "./CameraPanel.css";
 
@@ -1041,11 +1043,13 @@ export default function CameraPanel({
     const cmds = moveAbs({ x: camX, y: camY, feed: 2000 });
     // Cap travel acceleration before a large move to prevent sudden jerk on start.
     // M204 T sets the non-printing (travel) acceleration in mm/s².
-    window.serial.writeLine('M204 T500').catch(() => { });
+    const accelOn = firmwareCommands.setAccel(500);
+    if (accelOn) window.serial.writeLine(accelOn).catch(() => { });
     window.serial.writeLine('G90').catch(() => { });
     cmds.forEach(c => window.serial.writeLine(c).catch(() => { }));
     // Restore acceleration after move is queued
-    window.serial.writeLine('M204 T1000').catch(() => { });
+    const accelOff = firmwareCommands.setAccel(1000);
+    if (accelOff) window.serial.writeLine(accelOff).catch(() => { });
 
     setAutoSearchStatus(`Moving to ${fidActiveId}…`);
     setTimeout(() => setAutoSearchStatus(''), 2500);

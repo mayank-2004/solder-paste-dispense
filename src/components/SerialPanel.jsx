@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { toast } from "../lib/toast.js";
+import { firmwareCommands } from '../lib/machine/firmwareCommands.js';
 import "./SerialPanel.css";
 
 export default function SerialPanel({
@@ -226,12 +227,12 @@ export default function SerialPanel({
           // after the bootloader reset before blasting movement commands.
           await new Promise(r => setTimeout(r, 3000));
           
-          setConsoleLines(prev => [...prev, `[SYS] ${new Date().toISOString()} Starting Auto-Home (G28)...`].slice(-500));
-          await window.serial.writeLine('G90');
-          await window.serial.writeLine('G28');
+          setConsoleLines(prev => [...prev, `[SYS] ${new Date().toISOString()} Starting Auto-Home...`].slice(-500));
+          await window.serial.writeLine(firmwareCommands.setAbsolute);
+          await window.serial.writeLine(firmwareCommands.home);
           await window.serial.writeLine('M400');
           
-          // ── Wait for G28 completion via awaitingOkRef (same as glue app) ──────
+          // ── Wait for home completion via awaitingOkRef (same as glue app) ──────
           const homingTimeout = setTimeout(() => {
             awaitingOkRef.current = null;
             window.pauseSerialPolling = false;
@@ -456,9 +457,9 @@ export default function SerialPanel({
         <div className="control-pane">
           <h3>Control</h3>
           <div className="control-grid-5" style={{ marginTop: 'auto' }}>
-            <button className="btn-dark small" onClick={() => { sendCommand('G28 X'); window.dispatchEvent(new CustomEvent('machine:homed')); }}>Home<br />X</button>
-            <button className="btn-dark small" onClick={() => { sendCommand('G28 Y'); window.dispatchEvent(new CustomEvent('machine:homed')); }}>Home<br />Y</button>
-            <button className="btn-dark small" onClick={() => { sendCommand('G28 Z'); window.dispatchEvent(new CustomEvent('machine:homed')); }}>Home<br />Z</button>
+            <button className="btn-dark small" onClick={() => { sendCommand(firmwareCommands.homeX); window.dispatchEvent(new CustomEvent('machine:homed')); }}>Home<br />X</button>
+            <button className="btn-dark small" onClick={() => { sendCommand(firmwareCommands.homeY); window.dispatchEvent(new CustomEvent('machine:homed')); }}>Home<br />Y</button>
+            <button className="btn-dark small" onClick={() => { sendCommand(firmwareCommands.homeZ); window.dispatchEvent(new CustomEvent('machine:homed')); }}>Home<br />Z</button>
           </div>
         </div>
 

@@ -100,9 +100,11 @@ export default function AutomatedDispensingPanel({
   isHomed = false,
   machinePosition = { x: 0, y: 0, z: 0 },
   panelBoards = [],
+  panelInfo = null,
   panelXf = null,
   toolOffset = { dx: 0, dy: 0 },
-  onPadDispensed
+  onPadDispensed,
+  rotationManager
 }) {
   const [isJobRunning, setIsJobRunning] = useState(false);
 
@@ -729,6 +731,13 @@ export default function AutomatedDispensingPanel({
 
       setJobProgress({ current: 0, total: totalPoints });
 
+      // Apply initial Tip Rotation if requested
+      if (pressureSettings.tipAngle !== undefined && pressureSettings.tipAngle > 0) {
+        if (window.serial) {
+           await sendGcodeWait(firmwareCommands.tipRotation.rotateTo(pressureSettings.tipAngle), 3000);
+        }
+      }
+
       const orderedPanelBoards = reverseBoardOrder ? [...panelBoards].reverse() : panelBoards;
       for (let bIdx = 0; bIdx < orderedPanelBoards.length; bIdx++) {
         const realBIdx = reverseBoardOrder ? (panelBoards.length - 1 - bIdx) : bIdx;
@@ -1299,6 +1308,11 @@ export default function AutomatedDispensingPanel({
                 <small style={{ color: '#888' }}>Pads above this area → bead; below → single dot</small>
               </label>
               <label>
+                Tip Angle (°):
+                <input type="number" step="1" min="0" max="180" value={pressureSettings.tipAngle || 0} onChange={e => setPressureSettings(s => ({...s, tipAngle: Number(e.target.value)}))} style={{ width: '100%', marginTop: '4px' }} />
+                <small style={{ color: '#888' }}>Required rotary tip angle</small>
+              </label>
+              <label style={{ gridColumn: '1 / -1', marginTop: '6px' }}>
                 Bead Speed (mm/min):
                 <input type="number" step="50" min="50" max="3000" value={beadFeedRate} onChange={e => setBeadFeedRate(Number(e.target.value))} style={{ width: '100%', marginTop: '4px' }} />
               </label>

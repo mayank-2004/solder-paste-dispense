@@ -35,6 +35,13 @@ export const firmwareCommands = {
         stopCycle: 'M9'
     },
     
+    // Tools (Quick Tip Rotation)
+    // Assuming A-axis is used for the rotary stepper
+    tipRotation: {
+        home: '$HA', // Home rotary axis (assuming GRBL Hal supports this, or custom M-code)
+        rotateTo: (angle) => `G0 A${angle.toFixed(2)}`
+    },
+    
     // Settings & Configuration
     setAccel: (accel) => "", // GRBL doesn't support dynamic M204 T...
     setZero: "G92 X0 Y0 Z0",

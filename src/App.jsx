@@ -37,6 +37,8 @@ import GuidedTour from "./components/GuidedTour.jsx";
 import FluxPanel from "./components/FluxPanel.jsx";
 import TipCleanerPanel from "./components/TipCleanerPanel.jsx";
 import { useTipCleaner } from "./hooks/useTipCleaner.js";
+import TipRotationPanel from "./components/TipRotationPanel.jsx";
+import { useTipRotation } from "./hooks/useTipRotation.js";
 
 function calculatePadCenter(p) {
   if (typeof p.x === "number" && typeof p.y === "number") {
@@ -254,6 +256,7 @@ export default function App() {
   const [fumePumpLoad, setFumePumpLoad] = useState(0);
   const tipCleaner = useTipCleaner();
   const [tipCleanerStatus, setTipCleanerStatus] = useState('IDLE');
+  const tipRotation = useTipRotation();
 
   const [showPasteDots, setShowPasteDots] = useState(false);
   const [dispensingSequence, setDispensingSequence] = useState([]);
@@ -1758,6 +1761,7 @@ export default function App() {
     { id: 'FluxPanel', num: '8', label: 'Flux', sub: 'Flux Spraying' },
     { id: 'FumeExtractionPanel', num: '9', label: 'Fumes', sub: 'Extraction System' },
     { id: 'TipCleanerPanel', num: '10', label: 'Tip Cleaner', sub: 'Auto Tip Cleaning' },
+    { id: 'TipRotationPanel', num: '11', label: 'Tip Rotation', sub: 'Rotary Mechanism' },
     { id: 'NetworkManagerPanel', num: '📡', label: 'Network', sub: 'Wi-Fi / Bluetooth / Fleet' },
   ];
 
@@ -2304,6 +2308,7 @@ export default function App() {
                   isConnected={isSerialConnected}
                   isHomed={isHomed}
                   machinePosition={machinePos}
+                  rotationManager={tipRotation}
                   onPadDispensed={() => {
                       tipCleaner.recordPadDispensed();
                   }}
@@ -2319,6 +2324,14 @@ export default function App() {
                     if (tipCleanerStatus === 'FAULT' || tipCleaner.needsCleaning) {
                       toast.error("Cannot start job: Tip cleaning mechanism fault or cleaning is required!");
                       tipCleaner.logEvent('Job blocked: Mandatory tip cleaning required.', 'error');
+                      return false;
+                    }
+                    if (pressureSettings?.tipAngle > 0 && !tipRotation.isHomed) {
+                      toast.error("Cannot start job: Tip rotation is required but mechanism is not homed!");
+                      return false;
+                    }
+                    if (tipRotation.status === 'FAULT') {
+                      toast.error("Cannot start job: Tip rotation mechanism fault!");
                       return false;
                     }
                     setIsJobRunning(true);
@@ -2425,6 +2438,27 @@ export default function App() {
                               tipCleaner.recordCleanSuccess();
                           }, 3000); // Simulate 3 second cleaning cycle
                       }
+                  }}
+                />
+              </div>
+
+              {/* ── Tip Rotation Panel ─────────────────────────────────── */}
+              <div style={{ display: activeComponent === 'TipRotationPanel' ? 'flex' : 'none', width: '100%', height: '100%', flexDirection: 'column' }}>
+                <TipRotationPanel 
+                  rotationManager={tipRotation}
+                  isConnected={isSerialConnected}
+                  isJobRunning={isJobRunning}
+                  onManualHome={() => {
+                    if (window.serial) {
+                      window.serial.writeLine(firmwareCommands.tipRotation.home);
+                    }
+                    tipRotation.homeRotation();
+                  }}
+                  onManualRotate={(angle) => {
+                    if (window.serial) {
+                      window.serial.writeLine(firmwareCommands.tipRotation.rotateTo(angle));
+                    }
+                    tipRotation.setAngle(angle);
                   }}
                 />
               </div>

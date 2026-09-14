@@ -41,6 +41,8 @@ import TipRotationPanel from "./components/TipRotationPanel.jsx";
 import { useTipRotation } from "./hooks/useTipRotation.js";
 import TipManagementPanel from "./components/TipManagementPanel.jsx";
 import { useTipManager } from "./hooks/useTipManager.js";
+import SafetyPanel from "./components/SafetyPanel.jsx";
+import { useSafetyManager } from "./hooks/useSafetyManager.js";
 
 function calculatePadCenter(p) {
   if (typeof p.x === "number" && typeof p.y === "number") {
@@ -260,6 +262,31 @@ export default function App() {
   const [tipCleanerStatus, setTipCleanerStatus] = useState('IDLE');
   const tipRotation = useTipRotation();
   const tipManager = useTipManager();
+
+  const handleCriticalFault = useCallback((fault) => {
+    if (window.serial) {
+      window.serial.writeLine('!'); // Feedhold
+      window.serial.writeLine('M5'); // Stop Spindle/Dispenser/Flux
+      window.serial.writeLine('M9'); // Stop Coolant/Air
+    }
+    toast.error(`SAFETY HALT: ${fault.message}`);
+    triggerEmergencyStop();
+  }, [triggerEmergencyStop]);
+
+  const safetyManager = useSafetyManager(handleCriticalFault);
+
+  // Monitor hardware sub-systems for faults
+  useEffect(() => {
+    if (fumeStatus === 'FAULT') {
+      safetyManager.triggerFault('E002', 'Fume Extraction Fault Detected');
+    }
+    if (tipCleanerStatus === 'FAULT') {
+      safetyManager.triggerFault('E005', 'Tip Cleaner Mechanism Fault');
+    }
+    if (tipRotation.status === 'FAULT') {
+      safetyManager.triggerFault('E005', 'Tip Rotation Mechanism Fault');
+    }
+  }, [fumeStatus, tipCleanerStatus, tipRotation.status, safetyManager]);
 
   const [showPasteDots, setShowPasteDots] = useState(false);
   const [dispensingSequence, setDispensingSequence] = useState([]);
@@ -1766,6 +1793,7 @@ export default function App() {
     { id: 'TipCleanerPanel', num: '10', label: 'Tip Cleaner', sub: 'Auto Tip Cleaning' },
     { id: 'TipRotationPanel', num: '11', label: 'Tip Rotation', sub: 'Rotary Mechanism' },
     { id: 'TipManagementPanel', num: '12', label: 'Tip Management', sub: 'Auto Tip Change' },
+    { id: 'SafetyPanel', num: '🛡️', label: 'Safety', sub: 'Emergency / Diagnostics' },
     { id: 'NetworkManagerPanel', num: '📡', label: 'Network', sub: 'Wi-Fi / Bluetooth / Fleet' },
   ];
 
@@ -2336,6 +2364,7 @@ export default function App() {
                   machinePosition={machinePos}
                   rotationManager={tipRotation}
                   tipManager={tipManager}
+                  safetyManager={safetyManager}
                   onPadDispensed={() => {
                       tipCleaner.recordPadDispensed();
                   }}
@@ -2505,6 +2534,14 @@ export default function App() {
                       window.serial.writeLine(cmd);
                     }
                   }}
+                />
+              </div>
+
+              {/* ── Safety Panel ─────────────────────────────────── */}
+              <div style={{ display: activeComponent === 'SafetyPanel' ? 'flex' : 'none', width: '100%', height: '100%', flexDirection: 'column' }}>
+                <SafetyPanel 
+                  safetyManager={safetyManager}
+                  isConnected={isSerialConnected}
                 />
               </div>
 

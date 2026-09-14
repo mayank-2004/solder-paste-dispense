@@ -105,7 +105,8 @@ export default function AutomatedDispensingPanel({
   toolOffset = { dx: 0, dy: 0 },
   onPadDispensed,
   rotationManager,
-  tipManager
+  tipManager,
+  safetyManager
 }) {
   const [isJobRunning, setIsJobRunning] = useState(false);
 
@@ -440,6 +441,15 @@ export default function AutomatedDispensingPanel({
     const stock = PasteStore.getStock();
     const needed = pasteSummary?.totalVolUl ?? 0;
     const checks = [
+      {
+        id: 'safety',
+        label: 'Safety Manager',
+        critical: true,
+        passed: !safetyManager || !safetyManager.hasCriticalFault,
+        detail: !safetyManager || !safetyManager.hasCriticalFault
+          ? 'System is SAFE'
+          : 'Safety fault active — check Safety panel',
+      },
       {
         id: 'serial',
         label: 'Serial port connected',
@@ -837,6 +847,7 @@ export default function AutomatedDispensingPanel({
 
         for (let i = 0; i < seq.length; i++) {
           if (!isJobRunningRef.current) throw new Error("Job Aborted");
+          if (safetyManager?.hasCriticalFault) throw new Error("Safety Halt Activated");
 
           globalPointCount++;
           globalPointCountRef.current = globalPointCount;

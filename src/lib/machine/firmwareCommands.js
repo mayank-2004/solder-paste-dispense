@@ -15,9 +15,9 @@ export const firmwareCommands = {
     dispenserOff: "M5",
     
     // Tools (Flux System)
-    // GRBL Command & Pin Mapping (Arduino MEGA): 
-    // M3 -> Pump FORWARD (Digital Pin 6 : Spindle Enable)
-    // M4 -> Pump REVERSE (Digital Pin 5 : Spindle Direction)
+    // GRBL Command & Pin Mapping (Arduino Nano - ATmega328P):
+    // M3 -> Pump FORWARD (Digital Pin 11 : Spindle Enable PWM)
+    // M4 -> Pump REVERSE (Digital Pin 13 : Spindle Direction)
     // M5 -> Stop Pump
     flux: {
         cleanStart:   'M3',       // Spindle CW (Pump Forward)
@@ -29,19 +29,24 @@ export const firmwareCommands = {
     },
 
     // Tools (Automatic Tip Cleaner)
-    // Assuming custom M-codes or specific spindle/coolant pins are used.
+    // M8 -> Coolant Enable (Analog Pin A3)
     tipCleaner: {
-        runCycle: 'M8', // Placeholder: M8 typically coolant on, adjust as needed for air jet/servo trigger
-        stopCycle: 'M9'
+        runCycle: 'M8', // Coolant ON (Air jet / servo trigger)
+        stopCycle: 'M9' // Coolant OFF
     },
     
     // Tools (Quick Tip Rotation)
-    // Assuming A-axis is used for the rotary stepper
+    // Note: Running on a separate, dedicated Nano board via a multiplexed/separate serial connection.
     tipRotation: {
-        home: '$HA', // Home rotary axis (assuming GRBL Hal supports this, or custom M-code)
+        home: '$HA', // Home rotary axis (assuming custom firmware or mapped to an axis on the dedicated board)
         rotateTo: (angle) => `G0 A${angle.toFixed(2)}`
     },
     
+    // Tools (Automatic Tip Changer)
+    tipChanger: {
+        dropTip: 'M10', // Pseudo M-code for engaging rack/dropping tip
+        pickTip: 'M11'  // Pseudo M-code for locking new tip
+    },
     // Settings & Configuration
     setAccel: (accel) => "", // GRBL doesn't support dynamic M204 T...
     setZero: "G92 X0 Y0 Z0",

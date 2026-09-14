@@ -39,6 +39,8 @@ import TipCleanerPanel from "./components/TipCleanerPanel.jsx";
 import { useTipCleaner } from "./hooks/useTipCleaner.js";
 import TipRotationPanel from "./components/TipRotationPanel.jsx";
 import { useTipRotation } from "./hooks/useTipRotation.js";
+import TipManagementPanel from "./components/TipManagementPanel.jsx";
+import { useTipManager } from "./hooks/useTipManager.js";
 
 function calculatePadCenter(p) {
   if (typeof p.x === "number" && typeof p.y === "number") {
@@ -257,6 +259,7 @@ export default function App() {
   const tipCleaner = useTipCleaner();
   const [tipCleanerStatus, setTipCleanerStatus] = useState('IDLE');
   const tipRotation = useTipRotation();
+  const tipManager = useTipManager();
 
   const [showPasteDots, setShowPasteDots] = useState(false);
   const [dispensingSequence, setDispensingSequence] = useState([]);
@@ -1762,6 +1765,7 @@ export default function App() {
     { id: 'FumeExtractionPanel', num: '9', label: 'Fumes', sub: 'Extraction System' },
     { id: 'TipCleanerPanel', num: '10', label: 'Tip Cleaner', sub: 'Auto Tip Cleaning' },
     { id: 'TipRotationPanel', num: '11', label: 'Tip Rotation', sub: 'Rotary Mechanism' },
+    { id: 'TipManagementPanel', num: '12', label: 'Tip Management', sub: 'Auto Tip Change' },
     { id: 'NetworkManagerPanel', num: '📡', label: 'Network', sub: 'Wi-Fi / Bluetooth / Fleet' },
   ];
 
@@ -2223,7 +2227,18 @@ export default function App() {
                   applyXf={applyXf}
                   selectedDesign={selectedOrigin ? selectedOrigin : (selectedMm ? { x: selectedMm.x, y: selectedMm.y } : null)}
                   effectiveOrigin={effectiveOrigin}
-                  toolOffset={maintenanceManager.getToolOffset()}
+                  toolOffset={(() => {
+                    const baseOffset = maintenanceManager.getToolOffset();
+                    const activeTip = tipManager?.tips?.find(t => t.id === tipManager.activeTipId);
+                    if (activeTip) {
+                      return { 
+                        dx: baseOffset.dx + (activeTip.offsetX || 0), 
+                        dy: baseOffset.dy + (activeTip.offsetY || 0),
+                        dz: (baseOffset.dz || 0) + (activeTip.offsetZ || 0)
+                      };
+                    }
+                    return baseOffset;
+                  })()}
                   setToolOffset={(o) => maintenanceManager.setToolOffset(o)}
                   pixelsPerMm={maintenanceManager.getPixelsPerMm()}
                   setPixelsPerMm={(val) => {
@@ -2289,7 +2304,18 @@ export default function App() {
                   boardOutline={boardOutline}
                   useSafePathPlanning={useSafePathPlanning}
                   setUseSafePathPlanning={setUseSafePathPlanning}
-                  toolOffset={maintenanceManager.getToolOffset()}
+                  toolOffset={(() => {
+                    const baseOffset = maintenanceManager.getToolOffset();
+                    const activeTip = tipManager?.tips?.find(t => t.id === tipManager.activeTipId);
+                    if (activeTip) {
+                      return { 
+                        dx: baseOffset.dx + (activeTip.offsetX || 0), 
+                        dy: baseOffset.dy + (activeTip.offsetY || 0),
+                        dz: (baseOffset.dz || 0) + (activeTip.offsetZ || 0)
+                      };
+                    }
+                    return baseOffset;
+                  })()}
                   componentHeights={componentHeights}
                   setComponentHeights={setComponentHeights}
                   fiducials={fiducials}
@@ -2309,6 +2335,7 @@ export default function App() {
                   isHomed={isHomed}
                   machinePosition={machinePos}
                   rotationManager={tipRotation}
+                  tipManager={tipManager}
                   onPadDispensed={() => {
                       tipCleaner.recordPadDispensed();
                   }}
@@ -2332,6 +2359,10 @@ export default function App() {
                     }
                     if (tipRotation.status === 'FAULT') {
                       toast.error("Cannot start job: Tip rotation mechanism fault!");
+                      return false;
+                    }
+                    if (tipManager && tipManager.status !== 'VERIFIED') {
+                      toast.error(`Cannot start job: Tip is ${tipManager.status.toLowerCase()}. Please verify tip installation.`);
                       return false;
                     }
                     setIsJobRunning(true);
@@ -2459,6 +2490,20 @@ export default function App() {
                       window.serial.writeLine(firmwareCommands.tipRotation.rotateTo(angle));
                     }
                     tipRotation.setAngle(angle);
+                  }}
+                />
+              </div>
+
+              {/* ── Tip Management Panel ─────────────────────────────────── */}
+              <div style={{ display: activeComponent === 'TipManagementPanel' ? 'flex' : 'none', width: '100%', height: '100%', flexDirection: 'column' }}>
+                <TipManagementPanel 
+                  tipManager={tipManager}
+                  isConnected={isSerialConnected}
+                  machinePosition={mPos}
+                  onWriteSerial={(cmd) => {
+                    if (window.serial) {
+                      window.serial.writeLine(cmd);
+                    }
                   }}
                 />
               </div>

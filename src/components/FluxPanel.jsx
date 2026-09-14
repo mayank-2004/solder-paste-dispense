@@ -84,9 +84,9 @@ export default function FluxPanel({
         <h3>FLUX SPRAYING SYSTEM</h3>
         <div className="flux-level-card">
           <div className="level-info">
-            <div className="level-text">FLUX TANK LEVEL</div>
+            <div className="level-text">FLUX TANK LEVEL (LIQUID ONLY)</div>
             <div className={`status-badge ${statusClass}`}>{statusText}</div>
-            <div className="weight-text">{(currentWeight ?? 0).toFixed(1)} g</div>
+            <div className="weight-text">{Math.max(0, (currentWeight ?? 0) - (settings?.emptyWeight ?? 0)).toFixed(1)} g</div>
           </div>
           <div className="progress-container">
             <div className="progress-bar" style={{ width: `${levelPct ?? 0}%`, backgroundColor: levelState === 'EMPTY' ? '#f44336' : levelState === 'LOW' ? '#ff9800' : '#4caf50' }}></div>
@@ -140,7 +140,7 @@ export default function FluxPanel({
             />
           </div>
           <div className="config-item">
-            <label>FULL WEIGHT (G)</label>
+            <label>FULL CAPACITY WEIGHT (G)</label>
             <input 
               type="number" 
               value={settings?.fullWeight ?? ''} 

@@ -104,7 +104,8 @@ export default function AutomatedDispensingPanel({
   panelXf = null,
   toolOffset = { dx: 0, dy: 0 },
   onPadDispensed,
-  rotationManager
+  rotationManager,
+  tipManager
 }) {
   const [isJobRunning, setIsJobRunning] = useState(false);
 
@@ -528,6 +529,15 @@ export default function AutomatedDispensingPanel({
         passed: false, // always amber at preflight — confirmed in the LOADING stage
         detail: 'You will confirm board presence in the next step (Load PCB stage). Camera check is available there.',
       },
+      ...(tipManager ? [{
+        id: 'tip',
+        label: 'Tip verified',
+        critical: true,
+        passed: tipManager.status === 'VERIFIED',
+        detail: tipManager.status === 'VERIFIED'
+          ? 'Tip is correctly mounted and verified'
+          : `Tip status is ${tipManager.status} — please verify in Tip Management panel`,
+      }] : []),
       (() => {
         // Check every transformed pad position against axis limits
         const { maxX, maxY } = axisLimits;

@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { toast } from '../lib/toast';
 
 const STORAGE_KEY = 'safetyManagerData';
 
@@ -26,6 +27,43 @@ export function useSafetyManager(onHaltSequence) {
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   }, [state]);
+
+  // Listen for hardware custom safety messages
+  useEffect(() => {
+    const handleEStop = (e) => {
+      const code = e.detail || 'E001';
+      toast.error(`HARDWARE E-STOP DETECTED: Code ${code}`);
+      
+      const isCritical = ['E001','E002','E003','E004','E005'].includes(code);
+      if (isCritical) {
+        if (onHaltSequence) onHaltSequence({ message: `Sensor tripped: ${code}` });
+      }
+
+      const faultKey = `hw_${code}`;
+      setState(prev => {
+        if (prev.activeFaults.some(f => f.id === faultKey)) return prev;
+        
+        return {
+          ...prev,
+          activeFaults: [
+            ...prev.activeFaults,
+            {
+              id: faultKey,
+              code: code,
+              source: 'Hardware Sensor',
+              message: `Sensor tripped: ${code}`,
+              isCritical,
+              timestamp: new Date().toISOString()
+            }
+          ],
+          systemState: isCritical ? 'HALTED' : 'WARNING'
+        };
+      });
+    };
+    
+    window.addEventListener('hw:FAULT', handleEStop);
+    return () => window.removeEventListener('hw:FAULT', handleEStop);
+  }, [onHaltSequence]);
 
   const triggerFault = useCallback((code, customMessage = null) => {
     const faultDef = FAULT_CODES[code] || { code, type: 'CRITICAL', defaultMessage: 'Unknown Fault' };

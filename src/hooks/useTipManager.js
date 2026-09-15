@@ -34,6 +34,21 @@ export function useTipManager() {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   }, [state]);
 
+  // Listen for hardware custom messages
+  useEffect(() => {
+    const handleTipChangerEvent = (e) => {
+      const hwState = e.detail; // DROPPED, PICKED, FAULT
+      if (hwState === 'FAULT') {
+        setState(prev => ({ ...prev, status: 'FAULT' }));
+      }
+      // Note: DROPPED/PICKED can be used to resolve promises if we tracked them, 
+      // but for now we just reflect the fault state globally.
+    };
+    
+    window.addEventListener('hw:TIP_CHANGER', handleTipChangerEvent);
+    return () => window.removeEventListener('hw:TIP_CHANGER', handleTipChangerEvent);
+  }, []);
+
   const addTip = useCallback(() => {
     setState(prev => ({
       ...prev,

@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { toast, showConfirm } from '../lib/toast';
+import { firmwareCommands } from '../lib/machine/firmwareCommands';
 
 const STORAGE_KEY = 'headPayloadConfig';
 export const MAX_PAYLOAD = 2.0; // kg
@@ -26,6 +27,24 @@ export function usePayloadManager() {
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   }, [state]);
+
+  // Listen for hardware custom messages
+  useEffect(() => {
+    const handleAck = (e) => {
+      const payloadVal = parseFloat(e.detail);
+      if (!isNaN(payloadVal)) {
+        setState(prev => ({
+          ...prev,
+          lastConfirmedPayload: payloadVal,
+          lastSyncTime: new Date().toISOString()
+        }));
+        toast.success(`Hardware verified payload: ${payloadVal.toFixed(2)} kg`);
+      }
+    };
+    
+    window.addEventListener('hw:PAYLOAD_ACK', handleAck);
+    return () => window.removeEventListener('hw:PAYLOAD_ACK', handleAck);
+  }, []);
 
   const applyPayload = useCallback(async (newPayload) => {
     const value = parseFloat(newPayload);
@@ -74,23 +93,15 @@ export function usePayloadManager() {
   }, []);
 
   const forceSync = useCallback(async (writeSerial) => {
-    // Simulate embedded syncing delay
     toast.info('Syncing payload with embedded controller...');
     
-    // If serial is connected, we would send a command here, e.g.,
+    // If serial is connected, send the command based on firmwareCommands
     if (writeSerial) {
-      writeSerial(`[PAYLOAD_SET:${state.configuredPayload.toFixed(2)}]`);
+      writeSerial(firmwareCommands.payload.setPayload(state.configuredPayload));
+      // State will now update automatically when hardware replies with [PAYLOAD_ACK:x.x]
+    } else {
+      toast.error('Not connected to serial port.');
     }
-
-    await new Promise(resolve => setTimeout(resolve, 800));
-
-    setState(prev => ({
-      ...prev,
-      lastConfirmedPayload: prev.configuredPayload,
-      lastSyncTime: new Date().toISOString()
-    }));
-    
-    toast.success('Embedded synchronization complete.');
   }, [state.configuredPayload]);
 
   // Derived state

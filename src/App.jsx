@@ -281,8 +281,9 @@ export default function App() {
   const motionConfig = useMotionConfig();
   const payloadManager = usePayloadManager();
 
-  // Monitor hardware sub-systems for faults
+  // Monitor hardware sub-systems for faults and custom events
   useEffect(() => {
+    // Check internal software states for faults
     if (fumeStatus === 'FAULT') {
       safetyManager.triggerFault('E002', 'Fume Extraction Fault Detected');
     }
@@ -292,6 +293,33 @@ export default function App() {
     if (tipRotation.status === 'FAULT') {
       safetyManager.triggerFault('E005', 'Tip Rotation Mechanism Fault');
     }
+    
+    // HW Event Listeners
+    const handleFumeRpm = (e) => setFumePumpLoad(parseFloat(e.detail) || 0);
+    const handleTipCleaner = (e) => {
+      const state = e.detail;
+      if (state === 'DONE') setTipCleanerStatus('READY');
+      else if (state === 'FAULT') setTipCleanerStatus('FAULT');
+    };
+    const handleTipRotation = (e) => {
+      const state = e.detail;
+      if (state === 'HOMED') {
+        tipRotation.setIsHomed(true);
+        tipRotation.setStatus('READY');
+      }
+      else if (state === 'DONE') tipRotation.setStatus('READY');
+      else if (state === 'FAULT') tipRotation.setStatus('FAULT');
+    };
+
+    window.addEventListener('hw:FUME_RPM', handleFumeRpm);
+    window.addEventListener('hw:TIP_CLEANER', handleTipCleaner);
+    window.addEventListener('hw:TIP_ROTATION', handleTipRotation);
+    
+    return () => {
+      window.removeEventListener('hw:FUME_RPM', handleFumeRpm);
+      window.removeEventListener('hw:TIP_CLEANER', handleTipCleaner);
+      window.removeEventListener('hw:TIP_ROTATION', handleTipRotation);
+    };
   }, [fumeStatus, tipCleanerStatus, tipRotation.status, safetyManager]);
 
   const [showPasteDots, setShowPasteDots] = useState(false);
@@ -2472,14 +2500,14 @@ export default function App() {
                   onManualStart={() => {
                     if (window.serial) {
                       setFumeStatus('RUNNING');
-                      window.serial.writeLine('M3');
+                      window.serial.writeLine(firmwareCommands.fumeExtraction.start(fumeExtraction.airflowPercent || 100));
                       fumeExtraction.logEvent('Operator started fume extraction manually.');
                     }
                   }}
                   onManualStop={() => {
                     if (window.serial) {
                       setFumeStatus('READY');
-                      window.serial.writeLine('M5');
+                      window.serial.writeLine(firmwareCommands.fumeExtraction.stop);
                       fumeExtraction.logEvent('Operator stopped fume extraction manually.');
                     }
                   }}

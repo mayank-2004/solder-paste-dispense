@@ -97,6 +97,19 @@ export function useFluxManager() {
     }
   }, [state]);
 
+  // Listen for hardware custom flux messages
+  useEffect(() => {
+    const handleFluxWeight = (e) => {
+      const weight = parseFloat(e.detail);
+      if (!isNaN(weight)) {
+        dispatch({ type: 'SET_WEIGHT', payload: weight });
+      }
+    };
+    
+    window.addEventListener('hw:FLUX_WEIGHT', handleFluxWeight);
+    return () => window.removeEventListener('hw:FLUX_WEIGHT', handleFluxWeight);
+  }, []);
+
   // ── Derived state: calculated dynamically, never stored ──────────────────
   const levelPct = useMemo(() => {
     const { emptyWeight, fullWeight } = state.settings;

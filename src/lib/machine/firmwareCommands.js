@@ -28,6 +28,13 @@ export const firmwareCommands = {
         dispenseOff:  'M5',       // Stop
     },
 
+    // Tools (Fume Extraction)
+    // Dedicated GRBL Board: M3 PWM controls fan speed
+    fumeExtraction: {
+        start: (speedPercent) => `M3 S${Math.round((speedPercent / 100) * 255)}`,
+        stop: 'M5'
+    },
+
     // Tools (Automatic Tip Cleaner)
     // M8 -> Coolant Enable (Analog Pin A3)
     tipCleaner: {
@@ -36,19 +43,30 @@ export const firmwareCommands = {
     },
     
     // Tools (Quick Tip Rotation)
-    // Note: Running on a separate, dedicated Nano board via a multiplexed/separate serial connection.
+    // Dedicated GRBL Board: Treats rotation as its own "X" axis
     tipRotation: {
-        home: '$HA', // Home rotary axis (assuming custom firmware or mapped to an axis on the dedicated board)
-        rotateTo: (angle) => `G0 A${angle.toFixed(2)}`
+        home: '$HX', // Home the X-axis of the dedicated rotation board
+        rotateTo: (angle) => `G0 X${angle.toFixed(2)}`
     },
     
     // Tools (Automatic Tip Changer)
+    // Dedicated GRBL Board: Uses Spindle Dir/Enable pins
     tipChanger: {
-        dropTip: 'M10', // Pseudo M-code for engaging rack/dropping tip
-        pickTip: 'M11'  // Pseudo M-code for locking new tip
+        dropTip: 'M3', // Spindle CW pin to actuate drop mechanism
+        pickTip: 'M4', // Spindle CCW pin to actuate pick mechanism
+        reset: 'M5'    // Turn off pins
     },
+
+    // Tools (Payload Configuration)
+    // Standard GRBL ignores commands inside parentheses (treats them as comments).
+    // The dedicated payload board can safely read this from the serial stream without throwing an error.
+    payload: {
+        setPayload: (val) => `(PAYLOAD_SET:${val.toFixed(2)})`
+    },
+
     // Settings & Configuration
-    setAccel: (accel) => `M204 P${accel} T${accel}`, // Dynamic acceleration update for supported firmwares
+    // Standard GRBL uses $120, $121, $122 for X, Y, Z acceleration
+    setAccel: (accel) => `$120=${accel}\n$121=${accel}\n$122=${accel}`, 
     setZero: "G92 X0 Y0 Z0",
     setAbsolute: "G90",
     setRelative: "G91",

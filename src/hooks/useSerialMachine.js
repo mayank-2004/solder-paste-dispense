@@ -56,6 +56,14 @@ export function useSerialMachine() {
           }
         }
         if (x !== null && y !== null && z !== null) setMachinePos({ x, y, z });
+        
+        // Parse custom Arduino bracket messages: [TYPE:VALUE]
+        const customMsgMatch = line.match(/\[([A-Z_]+):([^\]]+)\]/);
+        if (customMsgMatch) {
+          const type = customMsgMatch[1];
+          const value = customMsgMatch[2];
+          window.dispatchEvent(new CustomEvent(`hw:${type}`, { detail: value }));
+        }
       });
     }
   }, []);

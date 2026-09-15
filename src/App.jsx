@@ -45,6 +45,8 @@ import SafetyPanel from "./components/SafetyPanel.jsx";
 import { useSafetyManager } from "./hooks/useSafetyManager.js";
 import MotionConfigPanel from "./components/MotionConfigPanel.jsx";
 import { useMotionConfig } from "./hooks/useMotionConfig.js";
+import HeadConfigurationPanel from "./components/HeadConfigurationPanel.jsx";
+import { usePayloadManager } from "./hooks/usePayloadManager.js";
 
 function calculatePadCenter(p) {
   if (typeof p.x === "number" && typeof p.y === "number") {
@@ -277,6 +279,7 @@ export default function App() {
 
   const safetyManager = useSafetyManager(handleCriticalFault);
   const motionConfig = useMotionConfig();
+  const payloadManager = usePayloadManager();
 
   // Monitor hardware sub-systems for faults
   useEffect(() => {
@@ -1797,6 +1800,7 @@ export default function App() {
     { id: 'TipRotationPanel', num: '11', label: 'Tip Rotation', sub: 'Rotary Mechanism' },
     { id: 'TipManagementPanel', num: '12', label: 'Tip Management', sub: 'Auto Tip Change' },
     { id: 'MotionConfigPanel', num: '13', label: 'Motion', sub: 'High Speed Setup' },
+    { id: 'HeadConfigurationPanel', num: '14', label: 'Head Config', sub: 'Payload & Capacity' },
     { id: 'SafetyPanel', num: '🛡️', label: 'Safety', sub: 'Emergency / Diagnostics' },
     { id: 'NetworkManagerPanel', num: '📡', label: 'Network', sub: 'Wi-Fi / Bluetooth / Fleet' },
   ];
@@ -2546,6 +2550,19 @@ export default function App() {
                 <MotionConfigPanel 
                   motionConfig={motionConfig}
                   safetyManager={safetyManager}
+                  isConnected={isSerialConnected}
+                  onWriteSerial={(cmd) => {
+                    if (window.serial) {
+                      window.serial.writeLine(cmd);
+                    }
+                  }}
+                />
+              </div>
+
+              {/* ── Head Configuration Panel ─────────────────────────────────── */}
+              <div style={{ display: activeComponent === 'HeadConfigurationPanel' ? 'flex' : 'none', width: '100%', height: '100%', flexDirection: 'column' }}>
+                <HeadConfigurationPanel 
+                  payloadManager={payloadManager}
                   isConnected={isSerialConnected}
                   onWriteSerial={(cmd) => {
                     if (window.serial) {

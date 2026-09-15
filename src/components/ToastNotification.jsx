@@ -37,26 +37,26 @@ export function ToastContainer() {
 
   return (
     <div style={{
-      position: 'fixed', top: 20, right: 20, zIndex: 9999,
+      position: 'fixed', top: 90, right: 20, zIndex: 9999,
       display: 'flex', flexDirection: 'column', gap: 8,
-      maxWidth: 400, pointerEvents: 'none',
+      maxWidth: 320, pointerEvents: 'none',
     }}>
       {toasts.map(t => {
         const s = TYPE_STYLE[t.type] || TYPE_STYLE.info;
         return (
           <div key={t.id} style={{
-            padding: '11px 14px',
+            padding: '8px 12px',
             borderRadius: 6,
             background: s.bg,
             border: `1px solid ${s.border}`,
             color: '#e6edf3',
-            fontSize: '0.87em',
-            boxShadow: '0 4px 16px rgba(0,0,0,0.5)',
+            fontSize: '0.8em',
+            boxShadow: '0 4px 12px rgba(0,0,0,0.4)',
             pointerEvents: 'all',
-            display: 'flex', gap: 10, alignItems: 'flex-start',
+            display: 'flex', gap: 8, alignItems: 'flex-start',
           }}>
             <span style={{ color: s.color, flexShrink: 0, marginTop: 1, fontWeight: 700 }}>{s.icon}</span>
-            <span style={{ flex: 1, lineHeight: 1.5, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+            <span style={{ flex: 1, lineHeight: 1.4, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
               {t.message}
             </span>
             <button

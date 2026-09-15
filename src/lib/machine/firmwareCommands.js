@@ -48,7 +48,7 @@ export const firmwareCommands = {
         pickTip: 'M11'  // Pseudo M-code for locking new tip
     },
     // Settings & Configuration
-    setAccel: (accel) => "", // GRBL doesn't support dynamic M204 T...
+    setAccel: (accel) => `M204 P${accel} T${accel}`, // Dynamic acceleration update for supported firmwares
     setZero: "G92 X0 Y0 Z0",
     setAbsolute: "G90",
     setRelative: "G91",

@@ -43,6 +43,8 @@ import TipManagementPanel from "./components/TipManagementPanel.jsx";
 import { useTipManager } from "./hooks/useTipManager.js";
 import SafetyPanel from "./components/SafetyPanel.jsx";
 import { useSafetyManager } from "./hooks/useSafetyManager.js";
+import MotionConfigPanel from "./components/MotionConfigPanel.jsx";
+import { useMotionConfig } from "./hooks/useMotionConfig.js";
 
 function calculatePadCenter(p) {
   if (typeof p.x === "number" && typeof p.y === "number") {
@@ -274,6 +276,7 @@ export default function App() {
   }, [triggerEmergencyStop]);
 
   const safetyManager = useSafetyManager(handleCriticalFault);
+  const motionConfig = useMotionConfig();
 
   // Monitor hardware sub-systems for faults
   useEffect(() => {
@@ -1793,6 +1796,7 @@ export default function App() {
     { id: 'TipCleanerPanel', num: '10', label: 'Tip Cleaner', sub: 'Auto Tip Cleaning' },
     { id: 'TipRotationPanel', num: '11', label: 'Tip Rotation', sub: 'Rotary Mechanism' },
     { id: 'TipManagementPanel', num: '12', label: 'Tip Management', sub: 'Auto Tip Change' },
+    { id: 'MotionConfigPanel', num: '13', label: 'Motion', sub: 'High Speed Setup' },
     { id: 'SafetyPanel', num: '🛡️', label: 'Safety', sub: 'Emergency / Diagnostics' },
     { id: 'NetworkManagerPanel', num: '📡', label: 'Network', sub: 'Wi-Fi / Bluetooth / Fleet' },
   ];
@@ -2529,6 +2533,20 @@ export default function App() {
                   tipManager={tipManager}
                   isConnected={isSerialConnected}
                   machinePosition={mPos}
+                  onWriteSerial={(cmd) => {
+                    if (window.serial) {
+                      window.serial.writeLine(cmd);
+                    }
+                  }}
+                />
+              </div>
+
+              {/* ── Motion Config Panel ─────────────────────────────────── */}
+              <div style={{ display: activeComponent === 'MotionConfigPanel' ? 'flex' : 'none', width: '100%', height: '100%', flexDirection: 'column' }}>
+                <MotionConfigPanel 
+                  motionConfig={motionConfig}
+                  safetyManager={safetyManager}
+                  isConnected={isSerialConnected}
                   onWriteSerial={(cmd) => {
                     if (window.serial) {
                       window.serial.writeLine(cmd);

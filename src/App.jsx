@@ -10,11 +10,11 @@ import ComponentList from "./components/ComponentList.jsx";
 import JogPanel from "./components/JogPanel.jsx";
 import FiducialPanel from "./components/FiducialPanel.jsx";
 import AutomatedDispensingPanel from "./components/AutomatedDispensingPanel.jsx";
+import OperatorDashboard from "./components/OperatorDashboard.jsx";
 import { analyzeFiducialsWithRails } from "./lib/gerber/fiducialDetection.js";
 import { detectPcbOrigins } from "./lib/gerber/originDetection.js";
 import { FiducialVisionDetector } from "./lib/vision/fiducialVision.js";
 import { fitSimilarity, fitAffine, fitTranslation, fitHomography, applyTransform, rmsError } from "./lib/utils/transform2d.js";
-import { CollisionDetector } from "./lib/collision/collisionDetection.js";
 import { PadDetector } from "./lib/vision/padDetection.js";
 import { QualityController } from "./lib/quality/qualityControl.js";
 import NetworkManagerPanel from "./components/NetworkManagerPanel.jsx";
@@ -24,7 +24,6 @@ import { useFluxManager } from "./hooks/useFluxManager.js";
 import { useFumeExtraction } from "./hooks/useFumeExtraction.js";
 import { firmwareCommands } from "./lib/machine/firmwareCommands.js";
 import { generatePath } from "./lib/motion/pathGeneration.js";
-import { PasteVisualizer } from "./lib/paste/pasteVisualization.js";
 import { DispensingSequencer } from "./lib/automation/dispensingSequence.js";
 import { SafePathPlanner } from "./lib/automation/safePathPlanner.js";
 import ToolOffsetCalibration from "./components/ToolOffsetCalibration.jsx";
@@ -69,13 +68,6 @@ function processPads(points) {
       centerValid: c.valid, centerMethod: c.method, originalPad: pad
     };
   });
-}
-
-function parseLengthToMm(lenStr = "") {
-  const m = String(lenStr).match(/^([\d.]+)\s*(mm|in)?$/i);
-  if (!m) return null;
-  const v = parseFloat(m[1]); const unit = (m[2] || "mm").toLowerCase();
-  return unit === "in" ? v * 25.4 : v;
 }
 
 export default function App() {
@@ -167,7 +159,7 @@ export default function App() {
   const [panelInfo, setPanelInfo] = useState(null);
   const [panelRailFiducials, setPanelRailFiducials] = useState([]);
   const [panelXf, setPanelXf] = useState(null);
-  const [activeComponent, setActiveComponent] = useState('SerialPanel')
+  const [activeComponent, setActiveComponent] = useState('OperatorDashboard');
 
   // Move nozzle to the PCB's Gerber origin point in machine coordinates
   const goToPcbOrigin = useCallback(async () => {
@@ -249,12 +241,10 @@ export default function App() {
     }
   }, []);
 
-  const [collisionDetector] = useState(() => new CollisionDetector());
   const [padDetector] = useState(() => new PadDetector());
   const [qualityController] = useState(() => new QualityController());
   const [maintenanceManager] = useState(() => new NozzleMaintenanceManager());
   const [fiducialVisionDetector] = useState(() => new FiducialVisionDetector());
-  const [pasteVisualizer] = useState(() => new PasteVisualizer());
   const [dispensingSequencer] = useState(() => new DispensingSequencer());
   const [safePathPlanner] = useState(() => new SafePathPlanner());
   const fluxManager = useFluxManager();
@@ -632,7 +622,6 @@ export default function App() {
 
   const NS = "http://www.w3.org/2000/svg";
   const getSvgEl = useCallback(() => document.querySelector(".viewer .canvas svg"), []);
-  const getCanvas = useCallback(() => document.querySelector(".viewer .canvas"), []);
 
   const getSvgGeom = useCallback(() => {
     const svgEl = getSvgEl(); if (!svgEl) return null;
@@ -662,16 +651,6 @@ export default function App() {
 
     return { svgEl, minX, minY, vbW, vbH, mmPerUnit };
   }, [getSvgEl]);
-
-  const mmToUnits = useCallback((ptMm) => {
-    const g = getSvgGeom(); if (!g) return null;
-    return {
-      x: ptMm.x / g.mmPerUnit + g.minX,
-      y: ptMm.y / g.mmPerUnit + g.minY,
-      r: 1 / g.mmPerUnit,
-      _vb: g
-    };
-  }, [getSvgGeom]);
 
   function ensureGroup(id) {
     const svgEl = getSvgEl(); if (!svgEl) return null;
@@ -1510,7 +1489,6 @@ export default function App() {
     return () => obs.disconnect();
   }, [svg, updateOverlay]);
 
-
   // Update overlay when origin changes
   useEffect(() => {
     if (selectedOrigin) {
@@ -1815,6 +1793,7 @@ export default function App() {
 
   // Workflow steps (replaces old componentNavItems)
   const workflowSteps = [
+    { id: 'OperatorDashboard', num: '0', label: 'Dashboard', sub: 'Control Room Overview' },
     { id: 'SerialPanel', num: '1', label: 'Connect', sub: 'Serial / Machine' },
     { id: 'Viewer', num: '2', label: 'Load PCB', sub: 'Gerber / Layers' },
     { id: 'JogPanel', num: '3', label: 'Jog', sub: 'Manual Positioning' },
@@ -2082,6 +2061,24 @@ export default function App() {
             </div>
 
             <div className="content-area">
+              <div style={{ display: activeComponent === 'OperatorDashboard' ? 'block' : 'none', width: '100%', height: '100%' }}>
+                <OperatorDashboard
+                  isSerialConnected={isSerialConnected}
+                  isJobRunning={isJobRunning}
+                  systemState={safetyManager.systemState}
+                  motionConfig={motionConfig}
+                  payloadManager={payloadManager}
+                  tipManager={tipManager}
+                  fluxManager={fluxManager}
+                  fumeStatus={fumeStatus}
+                  tipCleanerStatus={tipCleanerStatus}
+                  tipRotation={tipRotation}
+                  machinePos={mPos}
+                  safetyManager={safetyManager}
+                  jobStatistics={jobStatistics}
+                  maintenanceManager={maintenanceManager}
+                />
+              </div>
               <div style={{ display: activeComponent === 'SerialPanel' ? 'block' : 'none', width: '100%', height: '100%' }}>
                 <div className="panel full-height">
                   <div className="panel-header">

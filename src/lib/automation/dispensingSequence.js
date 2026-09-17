@@ -260,6 +260,7 @@ export class DispensingSequencer {
     return {
       totalPads: sequence.length,
       totalDistance: totalDistance.toFixed(2),
+      totalTimeSeconds: Math.ceil(totalTime),
       estimatedTime: Math.ceil(totalTime / 60), // minutes
       averageDistance: (totalDistance / sequence.length).toFixed(2)
     };

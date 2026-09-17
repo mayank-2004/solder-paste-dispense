@@ -30,20 +30,27 @@ export function usePayloadManager() {
 
   // Listen for hardware custom messages
   useEffect(() => {
-    const handleAck = (e) => {
-      const payloadVal = parseFloat(e.detail);
-      if (!isNaN(payloadVal)) {
-        setState(prev => ({
-          ...prev,
-          lastConfirmedPayload: payloadVal,
-          lastSyncTime: new Date().toISOString()
-        }));
-        toast.success(`Hardware verified payload: ${payloadVal.toFixed(2)} kg`);
+    const handleMsg = (e) => {
+      const msgText = e.detail; // e.g., " PAYLOAD:1.50 STATUS:NORMAL"
+      
+      if (msgText.includes('PAYLOAD:')) {
+        const match = msgText.match(/PAYLOAD:([\d.]+)/);
+        if (match) {
+          const payloadVal = parseFloat(match[1]);
+          if (!isNaN(payloadVal)) {
+            setState(prev => ({
+              ...prev,
+              lastConfirmedPayload: payloadVal,
+              lastSyncTime: new Date().toISOString()
+            }));
+            // Silently update the UI without popping up a toast every 2 seconds
+          }
+        }
       }
     };
     
-    window.addEventListener('hw:PAYLOAD_ACK', handleAck);
-    return () => window.removeEventListener('hw:PAYLOAD_ACK', handleAck);
+    window.addEventListener('hw:MSG', handleMsg);
+    return () => window.removeEventListener('hw:MSG', handleMsg);
   }, []);
 
   const applyPayload = useCallback(async (newPayload) => {

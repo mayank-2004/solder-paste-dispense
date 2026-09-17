@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from "react";
-
 import { firmwareCommands } from "../lib/machine/firmwareCommands.js";
 
 export function useSerialMachine() {

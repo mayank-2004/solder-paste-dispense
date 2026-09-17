@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { toast, showConfirm } from '../lib/toast.js';
-import { dispensePoint, dispenseBead, jogRel } from "../lib/motion/gcode.js";
+import { dispensePoint, dispenseBead } from "../lib/motion/gcode.js";
 import { applyTransform, fitSimilarity, fitAffine } from "../lib/utils/transform2d.js";
 import "./AutomatedDispensingPanel.css";
 import { buildJobPasteSummary, PasteStore } from '../lib/paste/pasteTracker.js';
@@ -100,11 +100,9 @@ export default function AutomatedDispensingPanel({
   isHomed = false,
   machinePosition = { x: 0, y: 0, z: 0 },
   panelBoards = [],
-  panelInfo = null,
   panelXf = null,
   toolOffset = { dx: 0, dy: 0 },
   onPadDispensed,
-  rotationManager,
   tipManager,
   safetyManager
 }) {
@@ -124,9 +122,6 @@ export default function AutomatedDispensingPanel({
   const [jobStage, setJobStage] = useState('idle'); // idle, homing, loading, registering, dispensing, finished
   const [machineStatus, setMachineStatus] = useState('idle');
   const [jobProgress, setJobProgress] = useState({ current: 0, total: 0 });
-  const [regIndex, setRegIndex] = useState(0);
-  // const [currentPos, setCurrentPos] = useState({ x: 0, y: 0, z: 0 }); // Replaced by prop
-  const [jogStep, setJogStep] = useState(1);
 
   // Pad Alignment Preview state
   const [previewPadIdx, setPreviewPadIdx] = useState(0);
@@ -1115,16 +1110,6 @@ export default function AutomatedDispensingPanel({
     } else {
       toast.warning('Job stopped.');
     }
-  };
-
-  const jog = async (axis, dir) => {
-    const dist = dir * jogStep;
-    const cmds = jogRel(axis === 'X' ? { dx: dist, feed: 2000 } : { dy: dist, feed: 2000 });
-    for (const c of cmds) await sendGcodeWait(c);
-  };
-  const jogZ = async (dir) => {
-    const cmds = jogRel({ dz: dir * 0.5, feed: 500 });
-    for (const c of cmds) await sendGcodeWait(c);
   };
 
   // Move CAMERA crosshair to a pad position (no tool offset — camera is the reference)

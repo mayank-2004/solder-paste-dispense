@@ -43,20 +43,19 @@ export function useSafetyManager(onHaltSequence) {
       setState(prev => {
         if (prev.activeFaults.some(f => f.id === faultKey)) return prev;
         
+        const newFault = {
+          id: faultKey,
+          code: code,
+          source: 'Hardware Sensor',
+          message: `Sensor tripped: ${code}`,
+          isCritical,
+          timestamp: new Date().toISOString()
+        };
+
         return {
           ...prev,
-          activeFaults: [
-            ...prev.activeFaults,
-            {
-              id: faultKey,
-              code: code,
-              source: 'Hardware Sensor',
-              message: `Sensor tripped: ${code}`,
-              isCritical,
-              timestamp: new Date().toISOString()
-            }
-          ],
-          systemState: isCritical ? 'HALTED' : 'WARNING'
+          activeFaults: [newFault, ...prev.activeFaults],
+          faultHistory: [newFault, ...prev.faultHistory].slice(0, 100)
         };
       });
     };
@@ -78,20 +77,17 @@ export function useSafetyManager(onHaltSequence) {
     };
 
     setState(prev => {
-      // Prevent duplicate active faults of the exact same code if already active
-      if (prev.activeFaults.some(f => f.code === code)) {
-        return prev;
-      }
+      if (prev.activeFaults.some(f => f.code === code)) return prev;
+
       return {
         ...prev,
-        activeFaults: [newFault, ...prev.activeFaults]
+        activeFaults: [newFault, ...prev.activeFaults],
+        faultHistory: [newFault, ...prev.faultHistory].slice(0, 100)
       };
     });
 
     if (faultDef.type === 'EMERGENCY' || faultDef.type === 'CRITICAL') {
-      if (onHaltSequence) {
-        onHaltSequence(newFault);
-      }
+      if (onHaltSequence) onHaltSequence(newFault);
     }
   }, [onHaltSequence]);
 
@@ -100,27 +96,30 @@ export function useSafetyManager(onHaltSequence) {
       const faultToClear = prev.activeFaults.find(f => f.id === id);
       if (!faultToClear) return prev;
 
-      const clearedFault = {
-        ...faultToClear,
-        clearedAt: new Date().toISOString()
-      };
+      // Update the clearedAt timestamp in the history log
+      const updatedHistory = prev.faultHistory.map(f => 
+        f.id === id ? { ...f, clearedAt: new Date().toISOString() } : f
+      );
 
       return {
         activeFaults: prev.activeFaults.filter(f => f.id !== id),
-        faultHistory: [clearedFault, ...prev.faultHistory].slice(0, 100) // Keep last 100
+        faultHistory: updatedHistory
       };
     });
   }, []);
 
   const clearAllFaults = useCallback(() => {
     setState(prev => {
-      const clearedFaults = prev.activeFaults.map(f => ({
-        ...f,
-        clearedAt: new Date().toISOString()
-      }));
+      const now = new Date().toISOString();
+      const activeIds = prev.activeFaults.map(f => f.id);
+      
+      const updatedHistory = prev.faultHistory.map(f => 
+        activeIds.includes(f.id) ? { ...f, clearedAt: now } : f
+      );
+
       return {
         activeFaults: [],
-        faultHistory: [...clearedFaults, ...prev.faultHistory].slice(0, 100)
+        faultHistory: updatedHistory
       };
     });
   }, []);

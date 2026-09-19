@@ -55,7 +55,6 @@ export default function FluxPanel({
     const confirmed = await showConfirm("Run cleaning cycle?");
     if (confirmed) {
       onClean();
-      toast.success("Cleaning cycle started.");
     }
   };
 

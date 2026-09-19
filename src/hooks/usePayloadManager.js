@@ -80,7 +80,6 @@ export function usePayloadManager() {
       configuredPayload: value
     }));
     
-    toast.success(`Payload configured to ${value.toFixed(2)} kg.`);
     return true;
   }, [state.configuredPayload]);
 
@@ -95,13 +94,10 @@ export function usePayloadManager() {
       ...prev,
       warningThreshold: value
     }));
-    toast.success(`Warning threshold set to ${value.toFixed(2)} kg.`);
     return true;
   }, []);
 
   const forceSync = useCallback(async (writeSerial) => {
-    toast.info('Syncing payload with embedded controller...');
-    
     // If serial is connected, send the command based on firmwareCommands
     if (writeSerial) {
       writeSerial(firmwareCommands.payload.setPayload(state.configuredPayload));

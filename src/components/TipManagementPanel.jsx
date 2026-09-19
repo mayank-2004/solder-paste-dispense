@@ -20,7 +20,6 @@ export default function TipManagementPanel({
 
   const handleApplySlots = () => {
     tipManager.setSlotCount(tempSlotCount);
-    toast.success(`Slot count updated to ${tempSlotCount}`);
   };
 
   const handleSavePosition = (index) => {
@@ -29,7 +28,6 @@ export default function TipManagementPanel({
       return;
     }
     tipManager.calibrateSlot(index, machinePosition);
-    toast.success(`Slot ${index} position saved: X${machinePosition.x.toFixed(1)} Y${machinePosition.y.toFixed(1)}`);
   };
 
   const handleExecuteChange = async () => {
@@ -37,12 +35,7 @@ export default function TipManagementPanel({
       toast.error('Machine not connected.');
       return;
     }
-    const success = await tipManager.executeTipChange(tipManager.activeTipId, changeTargetId, onWriteSerial);
-    if (success) {
-      toast.success('Tip change complete.');
-    } else {
-      toast.error('Tip change failed!');
-    }
+    await tipManager.executeTipChange(tipManager.activeTipId, changeTargetId, onWriteSerial);
   };
 
   return (
@@ -161,7 +154,7 @@ export default function TipManagementPanel({
                   </div>
 
                   <div className="tip-actions">
-                    <button className="btn-action" onClick={() => toast.success('Saved')}>DONE</button>
+                    <button className="btn-action">DONE</button>
                     <button 
                       className="btn-action" 
                       onClick={() => tipManager.setActiveTip(tip.id, 'VERIFIED')}

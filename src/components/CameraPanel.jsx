@@ -122,7 +122,7 @@ function LensDistortionCalibration() {
     try {
       const r = await fetch(`${BASE}/capture`, { method: 'POST' });
       const d = await r.json();
-      if (d.ok) { toast.success(`Frame ${d.captures} captured — pattern found!`); await refreshStatus(); }
+      if (d.ok) { await refreshStatus(); }
       else toast.warning(`Not captured: ${d.error}`);
     } catch { toast.error('Vision server offline'); }
     finally { setBusy(false); }

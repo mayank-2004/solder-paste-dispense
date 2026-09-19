@@ -42,7 +42,6 @@ export default function MotionConfigPanel({ motionConfig, safetyManager, isConne
     }
 
     activateProfile(selectedTab, systemState, onWriteSerial);
-    toast.success(`${selectedTab.toUpperCase()} profile activated.`);
   };
 
   return (
